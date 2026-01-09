@@ -30,6 +30,10 @@ private:
     VkInstance mInstance;
     VkSurfaceKHR mSurface;
 
+    VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
+    VkDevice mDevice = VK_NULL_HANDLE;
+    VkQueue mGraphicsQueue = VK_NULL_HANDLE;
+    uint32_t mGraphicsQueueFamilyIndex = 0;
 };
 
 #endif //MYGAME_RENDERER_H
