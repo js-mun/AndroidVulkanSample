@@ -16,6 +16,7 @@
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <vector>
+#include <android/asset_manager.h>
 
 
 class Renderer {
@@ -48,6 +49,8 @@ private:
     VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
     VkPipeline mGraphicsPipeline = VK_NULL_HANDLE;
 
+    std::vector<char> readFile(const char* filename);
+    std::vector<uint32_t> loadSpirvFromAssets(AAssetManager* assetManager, const char* filename);
     VkShaderModule createShaderModule(const std::vector<uint32_t>& code);
 };
 

@@ -293,21 +293,121 @@ bool Renderer::initialize() {
     }
     LOGI("Vulkan Framebuffers created successfully!");
 
-    //12. Graphics Pipeline 생성 (간략화된 버전)
-    // 임시: 삼각형을 그리기 위한 하드코딩된 Vertex 데이터 사용 쉐이더 필요
-    // (실제 프로젝트에서는 별도의 .spv 파일을 로드하는 코드가 필요합니다)
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    //12. Graphics Pipeline 생성
+    // --- Shader Modules ---
+    auto vertCode= loadSpirvFromAssets(
+            mApp->activity->assetManager,"shaders/vert.spv");
 
-    if (vkCreatePipelineLayout(mDevice, &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS) {
-        LOGE("Failed to create Pipeline Layout");
+    auto fragCode= loadSpirvFromAssets(
+            mApp->activity->assetManager,"shaders/frag.spv");
+
+    VkShaderModule vertShader = createShaderModule(vertCode);
+    VkShaderModule fragShader = createShaderModule(fragCode);
+
+    VkPipelineShaderStageCreateInfo vertStage{};
+    vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertStage.module = vertShader;
+    vertStage.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragStage{};
+    fragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragStage.module = fragShader;
+    fragStage.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertStage, fragStage };
+
+// --- Vertex Input (없음) ---
+    VkPipelineVertexInputStateCreateInfo vertexInput{};
+    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+// --- Input Assembly ---
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+// --- Viewport & Scissor ---
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width  = (float)mSwapchainExtent.width;
+    viewport.height = (float)mSwapchainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = mSwapchainExtent;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports = &viewport;
+    viewportState.scissorCount = 1;
+    viewportState.pScissors = &scissor;
+
+// --- Rasterizer ---
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.lineWidth = 1.0f;
+
+// --- Multisampling ---
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+// --- Color Blend ---
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT |
+            VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT |
+            VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+// --- Pipeline Layout ---
+    VkPipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+    if (vkCreatePipelineLayout(mDevice, &layoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS) {
+        LOGE("Failed to create pipeline layout");
         return false;
     }
 
-    // Pipeline 설정을 위해 쉐이더 모듈, 래스터라이저, 멀티샘플링 등 방대한 설정이 필요합니다.
-    // 여기서는 뼈대만 잡고 상세 설정은 다음 단계에서 이어서 진행하겠습니다.
-    LOGI("Vulkan Pipeline Layout created successfully!");
+// --- Graphics Pipeline ---
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.layout = mPipelineLayout;
+    pipelineInfo.renderPass = mRenderPass;
+    pipelineInfo.subpass = 0;
 
+    if (vkCreateGraphicsPipelines(
+            mDevice, VK_NULL_HANDLE, 1, &pipelineInfo,
+            nullptr, &mGraphicsPipeline) != VK_SUCCESS) {
+        LOGE("Failed to create graphics pipeline");
+        return false;
+    }
+
+    vkDestroyShaderModule(mDevice, fragShader, nullptr);
+    vkDestroyShaderModule(mDevice, vertShader, nullptr);
+
+    LOGI("Vulkan Graphics Pipeline created successfully!");
 
     return true;
 }
@@ -351,3 +451,63 @@ Renderer::~Renderer() {
     }
 }
 
+VkShaderModule Renderer::createShaderModule(const std::vector<uint32_t>& code) {
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = code.size() * sizeof(uint32_t);
+    createInfo.pCode = code.data();
+
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(
+            mDevice,
+            &createInfo,
+            nullptr,
+            &shaderModule) != VK_SUCCESS) {
+
+        LOGE("Failed to create shader module");
+        return VK_NULL_HANDLE;
+    }
+
+    return shaderModule;
+}
+
+
+std::vector<char> Renderer::readFile(const char* filename) {
+    FILE* file = fopen(filename, "rb");
+    fseek(file, 0, SEEK_END);
+    size_t size = ftell(file);
+    rewind(file);
+
+    std::vector<char> buffer(size);
+    fread(buffer.data(), 1, size, file);
+    fclose(file);
+
+    return buffer;
+}
+
+std::vector<uint32_t> Renderer::loadSpirvFromAssets(
+        AAssetManager* assetManager,
+        const char* filename) {
+
+    AAsset* asset = AAssetManager_open(
+            assetManager,
+            filename,
+            AASSET_MODE_BUFFER);
+
+    if (!asset) {
+        LOGE("Failed to open asset: %s", filename);
+        return {};
+    }
+
+    size_t size = AAsset_getLength(asset);
+
+    if (size % 4 != 0) {
+        LOGE("SPIR-V file size is not multiple of 4: %s", filename);
+    }
+
+    std::vector<uint32_t> buffer(size / 4);
+    AAsset_read(asset, buffer.data(), size);
+    AAsset_close(asset);
+
+    return buffer;
+}
