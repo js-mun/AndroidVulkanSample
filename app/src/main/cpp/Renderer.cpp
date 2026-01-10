@@ -373,6 +373,18 @@ bool Renderer::initialize() {
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = &colorBlendAttachment;
 
+    // --- Depth Stencil (명시적 비활성화) ---
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+
+    // --- Dynamic State (뷰포트 반전을 위해 필수) ---
+    std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+    dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicStateInfo.pDynamicStates = dynamicStates.data();
+
+
 // --- Pipeline Layout ---
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -393,6 +405,8 @@ bool Renderer::initialize() {
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pDynamicState = &dynamicStateInfo;
     pipelineInfo.layout = mPipelineLayout;
     pipelineInfo.renderPass = mRenderPass;
     pipelineInfo.subpass = 0;
@@ -406,8 +420,54 @@ bool Renderer::initialize() {
 
     vkDestroyShaderModule(mDevice, fragShader, nullptr);
     vkDestroyShaderModule(mDevice, vertShader, nullptr);
-
     LOGI("Vulkan Graphics Pipeline created successfully!");
+
+    // 13. Command Pool 생성
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.queueFamilyIndex = mGraphicsQueueFamilyIndex;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+    if (vkCreateCommandPool(mDevice, &poolInfo, nullptr, &mCommandPool) != VK_SUCCESS) {
+        LOGE("Failed to create command pool");
+        return false;
+    }
+
+    // 14. Command Buffers 할당
+    mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = mCommandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = (uint32_t)mCommandBuffers.size();
+
+    if (vkAllocateCommandBuffers(mDevice, &allocInfo, mCommandBuffers.data()) != VK_SUCCESS) {
+        LOGE("Failed to allocate command buffers");
+        return false;
+    }
+
+    // 15. 동기화 객체 생성 (Semaphores & Fences)
+    mImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    mRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    mInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        if (vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]) != VK_SUCCESS ||
+            vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(mDevice, &fenceInfo, nullptr, &mInFlightFences[i]) != VK_SUCCESS) {
+            LOGE("Failed to create synchronization objects for a frame");
+            return false;
+        }
+    }
+
+    LOGI("Vulkan Initialization Wrap-up Successful!");
 
     return true;
 }
@@ -415,6 +475,18 @@ bool Renderer::initialize() {
 Renderer::~Renderer() {
     // Device 레벨 객체들 해제
     if (mDevice != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(mDevice); // 모든 작업이 끝날 때까지 대기
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            vkDestroySemaphore(mDevice, mRenderFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(mDevice, mImageAvailableSemaphores[i], nullptr);
+            vkDestroyFence(mDevice, mInFlightFences[i], nullptr);
+        }
+
+        if (mCommandPool != VK_NULL_HANDLE) {
+            vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
+        }
+
         if (mGraphicsPipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
         }
@@ -451,6 +523,104 @@ Renderer::~Renderer() {
     }
 }
 
+void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        LOGE("Failed to begin recording command buffer");
+    }
+
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = mRenderPass;
+    renderPassInfo.framebuffer = mSwapchainFramebuffers[imageIndex];
+    renderPassInfo.renderArea.offset = {0, 0};
+    renderPassInfo.renderArea.extent = mSwapchainExtent;
+
+    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor;
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
+
+    // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = (float)mSwapchainExtent.height;
+    viewport.width = (float)mSwapchainExtent.width;
+    viewport.height = -(float)mSwapchainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = mSwapchainExtent;
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+    // 삼각형 그리기 (정점 3개)
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        LOGE("Failed to record command buffer");
+    }
+}
+
+void Renderer::render() {
+    // 1. 이전 프레임 작업이 끝날 때까지 대기
+    vkWaitForFences(mDevice, 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
+    vkResetFences(mDevice, 1, &mInFlightFences[mCurrentFrame]);
+
+    // 2. 스왑체인에서 이미지 가져오기
+    uint32_t imageIndex;
+    vkAcquireNextImageKHR(mDevice, mSwapchain, UINT64_MAX, mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
+
+    // 3. 커맨드 버퍼 기록
+    vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
+    recordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex);
+
+    // 4. GPU 큐에 제출
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    VkSemaphore waitSemaphores[] = {mImageAvailableSemaphores[mCurrentFrame]};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &mCommandBuffers[mCurrentFrame];
+
+    VkSemaphore signalSemaphores[] = {mRenderFinishedSemaphores[mCurrentFrame]};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    if (vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mInFlightFences[mCurrentFrame]) != VK_SUCCESS) {
+        LOGE("Failed to submit draw command buffer");
+    }
+
+    // 5. 화면에 표시 (Present)
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+
+    VkSwapchainKHR swapchains[] = {mSwapchain};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapchains;
+    presentInfo.pImageIndices = &imageIndex;
+
+    vkQueuePresentKHR(mGraphicsQueue, &presentInfo);
+
+    // 6. 다음 프레임 인덱스로 교체
+    mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
 VkShaderModule Renderer::createShaderModule(const std::vector<uint32_t>& code) {
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -469,20 +639,6 @@ VkShaderModule Renderer::createShaderModule(const std::vector<uint32_t>& code) {
     }
 
     return shaderModule;
-}
-
-
-std::vector<char> Renderer::readFile(const char* filename) {
-    FILE* file = fopen(filename, "rb");
-    fseek(file, 0, SEEK_END);
-    size_t size = ftell(file);
-    rewind(file);
-
-    std::vector<char> buffer(size);
-    fread(buffer.data(), 1, size, file);
-    fclose(file);
-
-    return buffer;
 }
 
 std::vector<uint32_t> Renderer::loadSpirvFromAssets(

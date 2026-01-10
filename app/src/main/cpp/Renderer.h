@@ -25,6 +25,7 @@ public:
     virtual ~Renderer();
 
     bool initialize();
+    void render();
 
 
 private:
@@ -49,9 +50,19 @@ private:
     VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
     VkPipeline mGraphicsPipeline = VK_NULL_HANDLE;
 
-    std::vector<char> readFile(const char* filename);
+    VkCommandPool mCommandPool = VK_NULL_HANDLE;
+    std::vector<VkCommandBuffer> mCommandBuffers;
+
+    std::vector<VkSemaphore> mImageAvailableSemaphores;
+    std::vector<VkSemaphore> mRenderFinishedSemaphores;
+    std::vector<VkFence> mInFlightFences;
+    uint32_t mCurrentFrame = 0;
+    const int MAX_FRAMES_IN_FLIGHT = 2;
+
+private:
     std::vector<uint32_t> loadSpirvFromAssets(AAssetManager* assetManager, const char* filename);
     VkShaderModule createShaderModule(const std::vector<uint32_t>& code);
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 };
 
 #endif //MYGAME_RENDERER_H

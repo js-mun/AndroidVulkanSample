@@ -112,12 +112,9 @@ void android_main(struct android_app *pApp) {
             // We know that our user data is a Renderer, so reinterpret cast it. If you change your
             // user data remember to change it here
             auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
-
+            pRenderer->render();
             // Process game input
-//            pRenderer->handleInput();
-
-            // Render a frame
-//            pRenderer->render();
+            // pRenderer->handleInput();
         }
     } while (!pApp->destroyRequested);
 }
