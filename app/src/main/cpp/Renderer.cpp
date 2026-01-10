@@ -223,8 +223,51 @@ bool Renderer::initialize() {
             return false;
         }
     }
-
     LOGI("Vulkan Swapchain and ImageViews created successfully!");
+
+    // 10. Render Pass 생성
+    VkAttachmentDescription colorAttachment = {};
+    colorAttachment.format = mSwapchainImageFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;   // 그리기 전 화면 지움
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; // 그린 후 메모리에 저장
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR; // 출력을 위한 레이아웃
+
+    VkAttachmentReference colorAttachmentRef = {};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+
+    // 스왑체인 이미지가 준비될 때까지 기다리도록 종속성 설정
+    VkSubpassDependency dependency = {};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    VkRenderPassCreateInfo renderPassInfo = {};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
+
+    if (vkCreateRenderPass(mDevice, &renderPassInfo, nullptr, &mRenderPass) != VK_SUCCESS) {
+        LOGE("Failed to create Render Pass");
+        return false;
+    }
+    LOGI("Vulkan Render Pass created successfully!");
 
     // 8. Render Pass & Pipeline 생성 (삼각형 쉐이더 포함)
     // 9. Command Buffer 기록 및 루프 시작
@@ -232,5 +275,29 @@ bool Renderer::initialize() {
     return true;
 }
 
-Renderer::~Renderer() = default;
+Renderer::~Renderer() {
+    // Device 레벨 객체들 해제
+    if (mDevice != VK_NULL_HANDLE) {
+        if (mRenderPass != VK_NULL_HANDLE) {
+            vkDestroyRenderPass(mDevice, mRenderPass, nullptr);
+        }
+        for (auto imageView : mSwapchainImageViews) {
+            vkDestroyImageView(mDevice, imageView, nullptr);
+        }
+        mSwapchainImageViews.clear();
+
+        if (mSwapchain != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(mDevice, mSwapchain, nullptr);
+        }
+        vkDestroyDevice(mDevice, nullptr);
+    }
+
+    // Instance 레벨 객체들 해제
+    if (mInstance != VK_NULL_HANDLE) {
+        if (mSurface != VK_NULL_HANDLE) {
+            vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
+        }
+        vkDestroyInstance(mInstance, nullptr);
+    }
+}
 

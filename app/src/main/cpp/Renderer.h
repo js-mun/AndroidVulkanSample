@@ -28,8 +28,8 @@ public:
 
 private:
     android_app* mApp;
-    VkInstance mInstance;
-    VkSurfaceKHR mSurface;
+    VkInstance mInstance = VK_NULL_HANDLE;
+    VkSurfaceKHR mSurface = VK_NULL_HANDLE;
 
     VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
     VkDevice mDevice = VK_NULL_HANDLE;
@@ -41,6 +41,8 @@ private:
     VkFormat mSwapchainImageFormat;
     VkExtent2D mSwapchainExtent;
     std::vector<VkImageView> mSwapchainImageViews;
+
+    VkRenderPass mRenderPass = VK_NULL_HANDLE;
 };
 
 #endif //MYGAME_RENDERER_H
