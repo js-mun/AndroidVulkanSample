@@ -293,8 +293,21 @@ bool Renderer::initialize() {
     }
     LOGI("Vulkan Framebuffers created successfully!");
 
-    // 8. Render Pass & Pipeline 생성 (삼각형 쉐이더 포함)
-    // 9. Command Buffer 기록 및 루프 시작
+    //12. Graphics Pipeline 생성 (간략화된 버전)
+    // 임시: 삼각형을 그리기 위한 하드코딩된 Vertex 데이터 사용 쉐이더 필요
+    // (실제 프로젝트에서는 별도의 .spv 파일을 로드하는 코드가 필요합니다)
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+    if (vkCreatePipelineLayout(mDevice, &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS) {
+        LOGE("Failed to create Pipeline Layout");
+        return false;
+    }
+
+    // Pipeline 설정을 위해 쉐이더 모듈, 래스터라이저, 멀티샘플링 등 방대한 설정이 필요합니다.
+    // 여기서는 뼈대만 잡고 상세 설정은 다음 단계에서 이어서 진행하겠습니다.
+    LOGI("Vulkan Pipeline Layout created successfully!");
+
 
     return true;
 }
@@ -302,6 +315,13 @@ bool Renderer::initialize() {
 Renderer::~Renderer() {
     // Device 레벨 객체들 해제
     if (mDevice != VK_NULL_HANDLE) {
+        if (mGraphicsPipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
+        }
+        if (mPipelineLayout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
+        }
+
         for (auto framebuffer : mSwapchainFramebuffers) {
             vkDestroyFramebuffer(mDevice, framebuffer, nullptr);
         }

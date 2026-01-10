@@ -43,8 +43,12 @@ private:
     std::vector<VkImageView> mSwapchainImageViews;
 
     VkRenderPass mRenderPass = VK_NULL_HANDLE;
-
     std::vector<VkFramebuffer> mSwapchainFramebuffers;
+
+    VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
+    VkPipeline mGraphicsPipeline = VK_NULL_HANDLE;
+
+    VkShaderModule createShaderModule(const std::vector<uint32_t>& code);
 };
 
 #endif //MYGAME_RENDERER_H
