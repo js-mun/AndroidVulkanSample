@@ -15,6 +15,7 @@
 #include "volk.h"
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <vector>
 
 
 class Renderer {
@@ -34,6 +35,12 @@ private:
     VkDevice mDevice = VK_NULL_HANDLE;
     VkQueue mGraphicsQueue = VK_NULL_HANDLE;
     uint32_t mGraphicsQueueFamilyIndex = 0;
+
+    VkSwapchainKHR mSwapchain = VK_NULL_HANDLE;
+    std::vector<VkImage> mSwapchainImages;
+    VkFormat mSwapchainImageFormat;
+    VkExtent2D mSwapchainExtent;
+    std::vector<VkImageView> mSwapchainImageViews;
 };
 
 #endif //MYGAME_RENDERER_H

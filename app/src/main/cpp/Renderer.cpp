@@ -139,15 +139,93 @@ bool Renderer::initialize() {
         LOGE("Failed to create Logical Device");
         return false;
     }
-
     // 장치 레벨의 함수 로드 및 큐 가져오기
     volkLoadDevice(mDevice);
     vkGetDeviceQueue(mDevice, mGraphicsQueueFamilyIndex, 0, &mGraphicsQueue);
-
     LOGI("Vulkan Logical Device created successfully!");
 
-    // 이후 단계 (간략화):
-    // 7. Swapchain 생성 (vkCreateSwapchainKHR)
+    // 8. Swapchain 생성
+    // Surface 성능 및 포맷 확인
+    VkSurfaceCapabilitiesKHR capabilities;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mPhysicalDevice, mSurface, &capabilities);
+    // 해상도 설정 (window 크기에 맞춤)
+    mSwapchainExtent = capabilities.currentExtent;
+    LOGI("Surface Current Extent: %u x %u", mSwapchainExtent.width, mSwapchainExtent.height);
+    // 최소 이미지 개수 설정 (Double Buffering 이상)
+    LOGI("Surface Capabilities: minImageCount=%u, maxImageCount=%u", capabilities.minImageCount, capabilities.maxImageCount);
+    uint32_t imageCount = capabilities.minImageCount + 1;
+    if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
+        imageCount = capabilities.maxImageCount;
+    }
+    LOGI("Selected image count: %d", imageCount);
+
+    uint32_t formatCount;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(mPhysicalDevice, mSurface, &formatCount, nullptr);
+    std::vector<VkSurfaceFormatKHR> formats(formatCount);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(mPhysicalDevice, mSurface, &formatCount, formats.data());
+
+    // 최적의 포맷 선택 (보통 B8G8R8A8_UNORM 또는 R8G8B8A8_UNORM)
+    VkSurfaceFormatKHR surfaceFormat = formats[0];
+    LOGI("Found %zu surface format(s):", formats.size());
+    for (const auto& availableFormat : formats) {
+        LOGI("  - Format: %d, ColorSpace: %d", availableFormat.format, availableFormat.colorSpace);
+        if ((availableFormat.format == VK_FORMAT_R8G8B8A8_UNORM ||
+             availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM) &&
+            availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            surfaceFormat = availableFormat;
+            break;
+        }
+    }
+    mSwapchainImageFormat = surfaceFormat.format;
+    LOGI("Selected final format: %d", surfaceFormat.format);
+
+    VkSwapchainCreateInfoKHR swapchainCreateInfo = {};
+    swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchainCreateInfo.surface = mSurface;
+    swapchainCreateInfo.minImageCount = imageCount;
+    swapchainCreateInfo.imageFormat = surfaceFormat.format;
+    swapchainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
+    swapchainCreateInfo.imageExtent = mSwapchainExtent;
+    swapchainCreateInfo.imageArrayLayers = 1;
+    swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchainCreateInfo.preTransform = capabilities.currentTransform;
+    swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // V-Sync 활성화
+    swapchainCreateInfo.clipped = VK_TRUE;
+
+    if (vkCreateSwapchainKHR(mDevice, &swapchainCreateInfo, nullptr, &mSwapchain) != VK_SUCCESS) {
+        LOGE("Failed to create Swapchain");
+        return false;
+    }
+
+    // 스왑체인 이미지 가져오기
+    vkGetSwapchainImagesKHR(mDevice, mSwapchain, &imageCount, nullptr);
+    mSwapchainImages.resize(imageCount);
+    vkGetSwapchainImagesKHR(mDevice, mSwapchain, &imageCount, mSwapchainImages.data());
+
+    // 9. Image Views 생성 (이미지에 접근하기 위한 통로)
+    mSwapchainImageViews.resize(mSwapchainImages.size());
+    for (size_t i = 0; i < mSwapchainImages.size(); i++) {
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = mSwapchainImages[i];
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = mSwapchainImageFormat;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(mDevice, &viewInfo, nullptr, &mSwapchainImageViews[i]) != VK_SUCCESS) {
+            LOGE("Failed to create Swapchain ImageView [%zu]", i);
+            return false;
+        }
+    }
+
+    LOGI("Vulkan Swapchain and ImageViews created successfully!");
+
     // 8. Render Pass & Pipeline 생성 (삼각형 쉐이더 포함)
     // 9. Command Buffer 기록 및 루프 시작
 
