@@ -26,9 +26,11 @@ public:
 
     bool initialize();
     void render();
+    bool mFramebufferResized = false;
 
 
 private:
+
     android_app* mApp;
     VkInstance mInstance = VK_NULL_HANDLE;
     VkSurfaceKHR mSurface = VK_NULL_HANDLE;
@@ -62,7 +64,10 @@ private:
 private:
     std::vector<uint32_t> loadSpirvFromAssets(AAssetManager* assetManager, const char* filename);
     VkShaderModule createShaderModule(const std::vector<uint32_t>& code);
+
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void cleanupSwapchain();
+    void recreateSwapchain();
 };
 
 #endif //MYGAME_RENDERER_H

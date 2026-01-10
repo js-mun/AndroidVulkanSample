@@ -20,6 +20,7 @@ extern "C" {
 void handle_cmd(android_app *pApp, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_INIT_WINDOW:
+            LOGI("APP_CMD_INIT_WINDOW");
             // A new window is created, associate a renderer with it. You may replace this with a
             // "game" class if that suits your needs. Remember to change all instances of userData
             // if you change the class here as a reinterpret_cast is dangerous this in the
@@ -31,6 +32,7 @@ void handle_cmd(android_app *pApp, int32_t cmd) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
+            LOGI("APP_CMD_TERM_WINDOW");
             // The window is being destroyed. Use this to clean up your userData to avoid leaking
             // resources.
             //
@@ -40,6 +42,20 @@ void handle_cmd(android_app *pApp, int32_t cmd) {
                 auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
                 pApp->userData = nullptr;
                 delete pRenderer;
+            }
+            break;
+        case APP_CMD_CONFIG_CHANGED:
+            LOGI("APP_CMD_CONFIG_CHANGED");
+            if (pApp->userData) {
+                auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
+                pRenderer->mFramebufferResized = true;
+            }
+            break;
+        case APP_CMD_WINDOW_RESIZED:
+            LOGI("APP_CMD_WINDOW_RESIZED");
+            if (pApp->userData) {
+                auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
+                pRenderer->mFramebufferResized = true;
             }
             break;
         default:
