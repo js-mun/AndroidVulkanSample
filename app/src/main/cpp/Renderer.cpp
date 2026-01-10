@@ -269,6 +269,30 @@ bool Renderer::initialize() {
     }
     LOGI("Vulkan Render Pass created successfully!");
 
+    // 11. Framebuffers 생성
+    mSwapchainFramebuffers.resize(mSwapchainImageViews.size());
+
+    for (size_t i = 0; i < mSwapchainImageViews.size(); i++) {
+        VkImageView attachments[] = {
+                mSwapchainImageViews[i]
+        };
+
+        VkFramebufferCreateInfo framebufferInfo = {};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = mRenderPass;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = mSwapchainExtent.width;
+        framebufferInfo.height = mSwapchainExtent.height;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(mDevice, &framebufferInfo, nullptr, &mSwapchainFramebuffers[i]) != VK_SUCCESS) {
+            LOGE("Failed to create Framebuffer [%zu]", i);
+            return false;
+        }
+    }
+    LOGI("Vulkan Framebuffers created successfully!");
+
     // 8. Render Pass & Pipeline 생성 (삼각형 쉐이더 포함)
     // 9. Command Buffer 기록 및 루프 시작
 
@@ -278,9 +302,15 @@ bool Renderer::initialize() {
 Renderer::~Renderer() {
     // Device 레벨 객체들 해제
     if (mDevice != VK_NULL_HANDLE) {
+        for (auto framebuffer : mSwapchainFramebuffers) {
+            vkDestroyFramebuffer(mDevice, framebuffer, nullptr);
+        }
+        mSwapchainFramebuffers.clear();
+
         if (mRenderPass != VK_NULL_HANDLE) {
             vkDestroyRenderPass(mDevice, mRenderPass, nullptr);
         }
+
         for (auto imageView : mSwapchainImageViews) {
             vkDestroyImageView(mDevice, imageView, nullptr);
         }

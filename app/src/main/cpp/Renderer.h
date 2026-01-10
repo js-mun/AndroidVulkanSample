@@ -43,6 +43,8 @@ private:
     std::vector<VkImageView> mSwapchainImageViews;
 
     VkRenderPass mRenderPass = VK_NULL_HANDLE;
+
+    std::vector<VkFramebuffer> mSwapchainFramebuffers;
 };
 
 #endif //MYGAME_RENDERER_H
