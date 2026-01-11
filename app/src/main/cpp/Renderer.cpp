@@ -339,9 +339,15 @@ bool Renderer::initialize() {
 
     VkPipelineShaderStageCreateInfo shaderStages[] = { vertStage, fragStage };
 
-// --- Vertex Input (없음) ---
+// --- Vertex Input ---
+    auto bindingDescription = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInput.vertexBindingDescriptionCount = 1;
+    vertexInput.pVertexBindingDescriptions = &bindingDescription;
+    vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInput.pVertexAttributeDescriptions = attributeDescriptions.data();
 
 // --- Input Assembly ---
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -551,6 +557,8 @@ bool Renderer::initialize() {
         vkUpdateDescriptorSets(mDevice, 1, &descriptorWrite, 0, nullptr);
     }
 
+    createVertexBuffer();
+
     LOGI("Vulkan Initialization Wrap-up Successful!");
 
     return true;
@@ -583,6 +591,10 @@ Renderer::~Renderer() {
             vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
         }
 
+        if (mVertexBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(mDevice, mVertexBuffer, nullptr);
+            vkFreeMemory(mDevice, mVertexBufferMemory, nullptr);
+        }
         if (mGraphicsPipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
         }
@@ -641,6 +653,10 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
 
+    VkBuffer vertexBuffers[] = { mVertexBuffer };
+    VkDeviceSize offsets[] = { 0 };
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
     // Descriptor Set 바인딩 (UBO 데이터 연결)
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineLayout, 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
 
@@ -667,6 +683,27 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         LOGE("Failed to record command buffer");
     }
+}
+
+void Renderer::createVertexBuffer() {
+    std::vector<Vertex> vertices = {
+            {{0.0f, 0.5f}},   // 위
+            {{-0.5f, -0.5f}}, // 왼쪽 아래
+            {{0.5f, -0.5f}}   // 오른쪽 아래
+    };
+
+    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+    // 1. 스테이징 버퍼(CPU용) 생성 없이 간단히 직접 생성 (학습용)
+    createBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 mVertexBuffer, mVertexBufferMemory);
+
+    // 2. 데이터 복사
+    void* data;
+    vkMapMemory(mDevice, mVertexBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, vertices.data(), (size_t) bufferSize);
+    vkUnmapMemory(mDevice, mVertexBufferMemory);
 }
 
 void Renderer::render() {
