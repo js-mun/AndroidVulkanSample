@@ -5,6 +5,7 @@
 #include "Renderer.h"
 #include "Log.h"
 #include <vector>
+#include <chrono>
 
 Renderer::Renderer(struct android_app *app) : mApp(app) {
 }
@@ -150,6 +151,8 @@ bool Renderer::initialize() {
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mPhysicalDevice, mSurface, &capabilities);
     // 해상도 설정 (window 크기에 맞춤)
     mSwapchainExtent = capabilities.currentExtent;
+    mSwapchainTransform = capabilities.currentTransform; // 회전 상태 저장 추가
+
     LOGI("Surface Current Extent: %u x %u", mSwapchainExtent.width, mSwapchainExtent.height);
     // 최소 이미지 개수 설정 (Double Buffering 이상)
     LOGI("Surface Capabilities: minImageCount=%u, maxImageCount=%u", capabilities.minImageCount, capabilities.maxImageCount);
@@ -293,6 +296,24 @@ bool Renderer::initialize() {
     }
     LOGI("Vulkan Framebuffers created successfully!");
 
+    // 11.2 Descriptor Set Layout 생성
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo{};
+    descriptorLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorLayoutInfo.bindingCount = 1;
+    descriptorLayoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(mDevice, &descriptorLayoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS) {
+        LOGE("Failed to create descriptor set layout");
+        return false;
+    }
+
     //12. Graphics Pipeline 생성
     // --- Shader Modules ---
     auto vertCode= loadSpirvFromAssets(
@@ -386,10 +407,12 @@ bool Renderer::initialize() {
 
 
 // --- Pipeline Layout ---
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &mDescriptorSetLayout;
 
-    if (vkCreatePipelineLayout(mDevice, &layoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(mDevice, &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS) {
         LOGE("Failed to create pipeline layout");
         return false;
     }
@@ -467,6 +490,67 @@ bool Renderer::initialize() {
         }
     }
 
+    // 16. Uniform Buffers 생성
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+    mUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    mUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    mUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     mUniformBuffers[i], mUniformBuffersMemory[i]);
+        vkMapMemory(mDevice, mUniformBuffersMemory[i], 0, bufferSize, 0, &mUniformBuffersMapped[i]);
+    }
+
+    // 17. Descriptor Pool 생성
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    VkDescriptorPoolCreateInfo poolInfoDesc{};
+    poolInfoDesc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfoDesc.poolSizeCount = 1;
+    poolInfoDesc.pPoolSizes = &poolSize;
+    poolInfoDesc.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    if (vkCreateDescriptorPool(mDevice, &poolInfoDesc, nullptr, &mDescriptorPool) != VK_SUCCESS) {
+        LOGE("Failed to create descriptor pool");
+        return false;
+    }
+
+    // 18. Descriptor Sets 할당 및 업데이트
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, mDescriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfoDesc{};
+    allocInfoDesc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfoDesc.descriptorPool = mDescriptorPool;
+    allocInfoDesc.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    allocInfoDesc.pSetLayouts = layouts.data();
+
+    mDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    if (vkAllocateDescriptorSets(mDevice, &allocInfoDesc, mDescriptorSets.data()) != VK_SUCCESS) {
+        LOGE("Failed to allocate descriptor sets");
+        return false;
+    }
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorBufferInfo bufferInfoUbo{};
+        bufferInfoUbo.buffer = mUniformBuffers[i];
+        bufferInfoUbo.offset = 0;
+        bufferInfoUbo.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = mDescriptorSets[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfoUbo;
+
+        vkUpdateDescriptorSets(mDevice, 1, &descriptorWrite, 0, nullptr);
+    }
+
     LOGI("Vulkan Initialization Wrap-up Successful!");
 
     return true;
@@ -481,6 +565,18 @@ Renderer::~Renderer() {
             vkDestroySemaphore(mDevice, mRenderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(mDevice, mImageAvailableSemaphores[i], nullptr);
             vkDestroyFence(mDevice, mInFlightFences[i], nullptr);
+
+            vkUnmapMemory(mDevice, mUniformBuffersMemory[i]);
+            vkDestroyBuffer(mDevice, mUniformBuffers[i], nullptr);
+            vkFreeMemory(mDevice, mUniformBuffersMemory[i], nullptr);
+        }
+
+        if (mDescriptorPool != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
+        }
+
+        if (mDescriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(mDevice, mDescriptorSetLayout, nullptr);
         }
 
         if (mCommandPool != VK_NULL_HANDLE) {
@@ -545,6 +641,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
 
+    // Descriptor Set 바인딩 (UBO 데이터 연결)
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineLayout, 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
+
     // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -581,6 +680,9 @@ void Renderer::render() {
     // 1. 이전 프레임 작업이 끝날 때까지 대기
     vkWaitForFences(mDevice, 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
     vkResetFences(mDevice, 1, &mInFlightFences[mCurrentFrame]);
+
+    // Uniform Buffer 업데이트 (회전 및 종횡비 계산)
+    updateUniformBuffer(mCurrentFrame);
 
     // 2. 스왑체인에서 이미지 가져오기
     uint32_t imageIndex;
@@ -673,6 +775,7 @@ void Renderer::recreateSwapchain() {
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mPhysicalDevice, mSurface, &capabilities);
     mSwapchainExtent = capabilities.currentExtent;
+    mSwapchainTransform = capabilities.currentTransform; // 회전 상태 업데이트
 
     uint32_t formatCount;
     vkGetPhysicalDeviceSurfaceFormatsKHR(mPhysicalDevice, mSurface, &formatCount, nullptr);
@@ -735,6 +838,78 @@ void Renderer::recreateSwapchain() {
     }
 
     LOGI("Vulkan Swapchain recreated successfully (New size: %ux%u)", mSwapchainExtent.width, mSwapchainExtent.height);
+}
+
+void Renderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+    VkBufferCreateInfo bufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(mDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+        LOGE("Failed to create buffer");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(mDevice, buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(mDevice, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        LOGE("Failed to allocate buffer memory");
+    }
+    vkBindBufferMemory(mDevice, buffer, bufferMemory, 0);
+}
+
+uint32_t Renderer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(mPhysicalDevice, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    LOGE("failed to find suitable memory type!");
+    return 0;
+}
+
+void Renderer::updateUniformBuffer(uint32_t currentImage) {
+    UniformBufferObject ubo{};
+    ubo.mvp = glm::mat4(1.0f);
+
+    // 1. 기기 회전(Surface Transform) 보정
+    // 기기가 물리적으로 돌아간 만큼 반대 방향으로 회전 행렬을 적용합니다.
+    if (mSwapchainTransform == VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR) {
+        ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    } else if (mSwapchainTransform == VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR) {
+        ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    } else if (mSwapchainTransform == VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
+        ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-270.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    }
+
+    // 2. 종횡비 보정 (가장 안정적인 'Short-side' 기준 방식)
+    // 물리적 해상도를 가져옵니다.
+    float width = static_cast<float>(mSwapchainExtent.width);
+    float height = static_cast<float>(mSwapchainExtent.height);
+
+    // 화면의 가로/세로 중 짧은 쪽 길이를 기준으로 잡습니다.
+    float minDim = std::min(width, height);
+
+    // [핵심] 짧은 쪽 길이에 맞춰 전체 좌표계를 정사각형 박스로 만듭니다.
+    // 이렇게 하면 어떤 회전 상태에서도 삼각형이 찌그러지지 않고 동일한 크기를 유지합니다.
+    ubo.mvp = glm::scale(ubo.mvp, glm::vec3(minDim / width, minDim / height, 1.0f));
+
+    // 3. 전체 크기 조정
+    ubo.mvp = glm::scale(ubo.mvp, glm::vec3(1.0f, 1.0f, 1.0f));
+
+    // GPU 메모리로 복사
+    if (mUniformBuffersMapped[currentImage] != nullptr) {
+        memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+    }
 }
 
 VkShaderModule Renderer::createShaderModule(const std::vector<uint32_t>& code) {

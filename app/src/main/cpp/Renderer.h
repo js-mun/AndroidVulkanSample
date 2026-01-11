@@ -17,7 +17,13 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <vector>
 #include <android/asset_manager.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
+
+struct UniformBufferObject {
+    glm::mat4 mvp;
+};
 
 class Renderer {
 public:
@@ -30,7 +36,6 @@ public:
 
 
 private:
-
     android_app* mApp;
     VkInstance mInstance = VK_NULL_HANDLE;
     VkSurfaceKHR mSurface = VK_NULL_HANDLE;
@@ -44,6 +49,7 @@ private:
     std::vector<VkImage> mSwapchainImages;
     VkFormat mSwapchainImageFormat;
     VkExtent2D mSwapchainExtent;
+    VkSurfaceTransformFlagBitsKHR mSwapchainTransform; // 스왑체인 회전 상태 저장
     std::vector<VkImageView> mSwapchainImageViews;
 
     VkRenderPass mRenderPass = VK_NULL_HANDLE;
@@ -61,6 +67,14 @@ private:
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
+    VkDescriptorSetLayout mDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> mDescriptorSets;
+
+    std::vector<VkBuffer> mUniformBuffers;
+    std::vector<VkDeviceMemory> mUniformBuffersMemory;
+    std::vector<void*> mUniformBuffersMapped;
+
 private:
     std::vector<uint32_t> loadSpirvFromAssets(AAssetManager* assetManager, const char* filename);
     VkShaderModule createShaderModule(const std::vector<uint32_t>& code);
@@ -68,6 +82,10 @@ private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void cleanupSwapchain();
     void recreateSwapchain();
+
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    void updateUniformBuffer(uint32_t currentImage);
 };
 
 #endif //MYGAME_RENDERER_H

@@ -5,6 +5,13 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("mygame")
 
+include(FetchContent)
+FetchContent_Declare(glm
+        GIT_REPOSITORY https://github.com/g-truc/glm.git
+        GIT_TAG        0.9.9.8
+)
+FetchContent_MakeAvailable(glm)
+
 # Creates your game shared library. The name must be the same as the
 # one used for loading in your Kotlin/Java or AndroidManifest.txt files.
 add_library(mygame SHARED
@@ -32,4 +39,5 @@ target_link_libraries(mygame
         log
         volk
         dl # Required for volkInitialize (dlopen/dlsym)
+        glm::glm
 )
