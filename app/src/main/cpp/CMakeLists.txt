@@ -17,6 +17,8 @@ FetchContent_MakeAvailable(glm)
 add_library(mygame SHARED
         main.cpp
         Renderer.cpp
+        asset_utils.cpp
+        vulkan_utils.cpp
 )
 
 add_library(volk STATIC third_party/volk/volk.c)

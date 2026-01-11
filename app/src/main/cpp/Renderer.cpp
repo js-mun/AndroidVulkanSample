@@ -4,6 +4,9 @@
 
 #include "Renderer.h"
 #include "Log.h"
+#include "asset_utils.h"
+#include "vulkan_utils.h"
+
 #include <vector>
 #include <chrono>
 
@@ -316,14 +319,14 @@ bool Renderer::initialize() {
 
     //12. Graphics Pipeline 생성
     // --- Shader Modules ---
-    auto vertCode= loadSpirvFromAssets(
+    auto vertCode= AssetUtils::loadSpirvFromAssets(
             mApp->activity->assetManager,"shaders/vert.spv");
 
-    auto fragCode= loadSpirvFromAssets(
+    auto fragCode= AssetUtils::loadSpirvFromAssets(
             mApp->activity->assetManager,"shaders/frag.spv");
 
-    VkShaderModule vertShader = createShaderModule(vertCode);
-    VkShaderModule fragShader = createShaderModule(fragCode);
+    VkShaderModule vertShader = VulkanUtils::createShaderModule(mDevice, vertCode);
+    VkShaderModule fragShader = VulkanUtils::createShaderModule(mDevice, fragCode);
 
     VkPipelineShaderStageCreateInfo vertStage{};
     vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -503,7 +506,7 @@ bool Renderer::initialize() {
     mUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VulkanUtils::createBuffer(mDevice, mPhysicalDevice, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                      mUniformBuffers[i], mUniformBuffersMemory[i]);
         vkMapMemory(mDevice, mUniformBuffersMemory[i], 0, bufferSize, 0, &mUniformBuffersMapped[i]);
@@ -695,7 +698,7 @@ void Renderer::createVertexBuffer() {
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
     // 1. 스테이징 버퍼(CPU용) 생성 없이 간단히 직접 생성 (학습용)
-    createBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    VulkanUtils::createBuffer(mDevice, mPhysicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                  mVertexBuffer, mVertexBufferMemory);
 
@@ -877,43 +880,6 @@ void Renderer::recreateSwapchain() {
     LOGI("Vulkan Swapchain recreated successfully (New size: %ux%u)", mSwapchainExtent.width, mSwapchainExtent.height);
 }
 
-void Renderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
-    VkBufferCreateInfo bufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-    bufferInfo.size = size;
-    bufferInfo.usage = usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    if (vkCreateBuffer(mDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-        LOGE("Failed to create buffer");
-    }
-
-    VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(mDevice, buffer, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-    if (vkAllocateMemory(mDevice, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-        LOGE("Failed to allocate buffer memory");
-    }
-    vkBindBufferMemory(mDevice, buffer, bufferMemory, 0);
-}
-
-uint32_t Renderer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(mPhysicalDevice, &memProperties);
-
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-            return i;
-        }
-    }
-
-    LOGE("failed to find suitable memory type!");
-    return 0;
-}
-
 void Renderer::updateUniformBuffer(uint32_t currentImage) {
     UniformBufferObject ubo{};
     ubo.mvp = glm::mat4(1.0f);
@@ -947,51 +913,4 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
     if (mUniformBuffersMapped[currentImage] != nullptr) {
         memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
-}
-
-VkShaderModule Renderer::createShaderModule(const std::vector<uint32_t>& code) {
-    VkShaderModuleCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = code.size() * sizeof(uint32_t);
-    createInfo.pCode = code.data();
-
-    VkShaderModule shaderModule;
-    if (vkCreateShaderModule(
-            mDevice,
-            &createInfo,
-            nullptr,
-            &shaderModule) != VK_SUCCESS) {
-
-        LOGE("Failed to create shader module");
-        return VK_NULL_HANDLE;
-    }
-
-    return shaderModule;
-}
-
-std::vector<uint32_t> Renderer::loadSpirvFromAssets(
-        AAssetManager* assetManager,
-        const char* filename) {
-
-    AAsset* asset = AAssetManager_open(
-            assetManager,
-            filename,
-            AASSET_MODE_BUFFER);
-
-    if (!asset) {
-        LOGE("Failed to open asset: %s", filename);
-        return {};
-    }
-
-    size_t size = AAsset_getLength(asset);
-
-    if (size % 4 != 0) {
-        LOGE("SPIR-V file size is not multiple of 4: %s", filename);
-    }
-
-    std::vector<uint32_t> buffer(size / 4);
-    AAsset_read(asset, buffer.data(), size);
-    AAsset_close(asset);
-
-    return buffer;
 }

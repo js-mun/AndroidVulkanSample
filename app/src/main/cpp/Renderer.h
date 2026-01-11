@@ -100,15 +100,14 @@ private:
     VkDeviceMemory mVertexBufferMemory = VK_NULL_HANDLE;
 
 private:
-    std::vector<uint32_t> loadSpirvFromAssets(AAssetManager* assetManager, const char* filename);
-    VkShaderModule createShaderModule(const std::vector<uint32_t>& code);
+//    VkShaderModule createShaderModule(const std::vector<uint32_t>& code);
 
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void cleanupSwapchain();
     void recreateSwapchain();
 
-    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+//    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+//    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void updateUniformBuffer(uint32_t currentImage);
     void createVertexBuffer();
 };
