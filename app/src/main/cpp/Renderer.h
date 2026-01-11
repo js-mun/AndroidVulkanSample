@@ -19,7 +19,7 @@
 #include <android/asset_manager.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-
+#include "vulkan_buffer.h"
 
 struct UniformBufferObject {
     glm::mat4 mvp;
@@ -92,22 +92,14 @@ private:
     VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> mDescriptorSets;
 
-    std::vector<VkBuffer> mUniformBuffers;
-    std::vector<VkDeviceMemory> mUniformBuffersMemory;
-    std::vector<void*> mUniformBuffersMapped;
-
-    VkBuffer mVertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory mVertexBufferMemory = VK_NULL_HANDLE;
+    std::unique_ptr<VulkanBuffer> mVertexBuffer;
+    std::vector<std::unique_ptr<VulkanBuffer>> mUniformBuffers;
 
 private:
-//    VkShaderModule createShaderModule(const std::vector<uint32_t>& code);
-
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void cleanupSwapchain();
     void recreateSwapchain();
 
-//    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
-//    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void updateUniformBuffer(uint32_t currentImage);
     void createVertexBuffer();
 };

@@ -500,16 +500,14 @@ bool Renderer::initialize() {
     }
 
     // 16. Uniform Buffers 생성
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
     mUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    mUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    mUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VulkanUtils::createBuffer(mDevice, mPhysicalDevice, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     mUniformBuffers[i], mUniformBuffersMemory[i]);
-        vkMapMemory(mDevice, mUniformBuffersMemory[i], 0, bufferSize, 0, &mUniformBuffersMapped[i]);
+        mUniformBuffers[i] = std::make_unique<VulkanBuffer>(
+                mDevice, mPhysicalDevice, sizeof(UniformBufferObject),
+                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+        mUniformBuffers[i]->map();
     }
 
     // 17. Descriptor Pool 생성
@@ -544,7 +542,7 @@ bool Renderer::initialize() {
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         VkDescriptorBufferInfo bufferInfoUbo{};
-        bufferInfoUbo.buffer = mUniformBuffers[i];
+        bufferInfoUbo.buffer = mUniformBuffers[i]->getBuffer();
         bufferInfoUbo.offset = 0;
         bufferInfoUbo.range = sizeof(UniformBufferObject);
 
@@ -576,10 +574,6 @@ Renderer::~Renderer() {
             vkDestroySemaphore(mDevice, mRenderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(mDevice, mImageAvailableSemaphores[i], nullptr);
             vkDestroyFence(mDevice, mInFlightFences[i], nullptr);
-
-            vkUnmapMemory(mDevice, mUniformBuffersMemory[i]);
-            vkDestroyBuffer(mDevice, mUniformBuffers[i], nullptr);
-            vkFreeMemory(mDevice, mUniformBuffersMemory[i], nullptr);
         }
 
         if (mDescriptorPool != VK_NULL_HANDLE) {
@@ -594,10 +588,6 @@ Renderer::~Renderer() {
             vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
         }
 
-        if (mVertexBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(mDevice, mVertexBuffer, nullptr);
-            vkFreeMemory(mDevice, mVertexBufferMemory, nullptr);
-        }
         if (mGraphicsPipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
         }
@@ -656,7 +646,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
 
-    VkBuffer vertexBuffers[] = { mVertexBuffer };
+    VkBuffer vertexBuffers[] = { mVertexBuffer->getBuffer() };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
@@ -695,18 +685,14 @@ void Renderer::createVertexBuffer() {
             {{0.5f, -0.5f}}   // 오른쪽 아래
     };
 
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
     // 1. 스테이징 버퍼(CPU용) 생성 없이 간단히 직접 생성 (학습용)
-    VulkanUtils::createBuffer(mDevice, mPhysicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 mVertexBuffer, mVertexBufferMemory);
-
-    // 2. 데이터 복사
-    void* data;
-    vkMapMemory(mDevice, mVertexBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t) bufferSize);
-    vkUnmapMemory(mDevice, mVertexBufferMemory);
+    VkDeviceSize size = sizeof(Vertex) * vertices.size();
+    mVertexBuffer = std::make_unique<VulkanBuffer>(
+            mDevice, mPhysicalDevice, size,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+    mVertexBuffer->copyTo(vertices.data(), size);
 }
 
 void Renderer::render() {
@@ -910,7 +896,5 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
     ubo.mvp = glm::scale(ubo.mvp, glm::vec3(1.0f, 1.0f, 1.0f));
 
     // GPU 메모리로 복사
-    if (mUniformBuffersMapped[currentImage] != nullptr) {
-        memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-    }
+    mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
 }
