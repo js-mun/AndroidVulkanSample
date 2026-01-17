@@ -18,9 +18,9 @@ add_library(mygame SHARED
         main.cpp
         Renderer.cpp
         asset_utils.cpp
-        vulkan_utils.cpp
         vulkan_buffer.cpp
         vulkan_context.cpp
+        vulkan_pipeline.cpp
 )
 
 add_library(volk STATIC third_party/volk/volk.c)

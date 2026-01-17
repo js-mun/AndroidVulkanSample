@@ -1,9 +1,4 @@
-//
-// Created by mj on 1/9/26.
-//
-
-#ifndef MYGAME_LOG_H
-#define MYGAME_LOG_H
+#pragma once
 
 #include <android/log.h>
 
@@ -18,5 +13,3 @@ static const char* kTAG = "MyVulkan";
   ((void)__android_log_print(ANDROID_LOG_WARN, kTAG, __VA_ARGS__))
 #define LOGE(...) \
   ((void)__android_log_print(ANDROID_LOG_ERROR, kTAG, __VA_ARGS__))
-
-#endif //MYGAME_LOG_H

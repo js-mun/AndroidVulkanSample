@@ -1,6 +1,4 @@
-// VulkanBuffer.cpp
 #include "vulkan_buffer.h"
-#include "vulkan_utils.h"
 #include "Log.h"
 #include <cstring>
 

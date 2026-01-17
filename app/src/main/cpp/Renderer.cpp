@@ -1,11 +1,7 @@
-//
-// Created by mj on 1/9/26.
-//
-
 #include "Renderer.h"
 #include "Log.h"
 #include "asset_utils.h"
-#include "vulkan_utils.h"
+#include "vulkan_types.h"
 
 #include <vector>
 #include <chrono>
@@ -111,49 +107,11 @@ bool Renderer::initialize() {
     }
     LOGI("Vulkan Swapchain and ImageViews created successfully!");
 
-    // 10. Render Pass 생성
-    VkAttachmentDescription colorAttachment = {};
-    colorAttachment.format = mSwapchainImageFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;   // 그리기 전 화면 지움
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; // 그린 후 메모리에 저장
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR; // 출력을 위한 레이아웃
-
-    VkAttachmentReference colorAttachmentRef = {};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-
-    // 스왑체인 이미지가 준비될 때까지 기다리도록 종속성 설정
-    VkSubpassDependency dependency = {};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-    VkRenderPassCreateInfo renderPassInfo = {};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
-
-    if (vkCreateRenderPass(mContext->getDevice(), &renderPassInfo, nullptr, &mRenderPass) != VK_SUCCESS) {
-        LOGE("Failed to create Render Pass");
+    mPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
+    if (!mPipeline->initialize(mSwapchainImageFormat, mApp->activity->assetManager)) {
+        LOGE("Failed to initialize Vulkan Pipeline");
         return false;
     }
-    LOGI("Vulkan Render Pass created successfully!");
 
     // 11. Framebuffers 생성
     mSwapchainFramebuffers.resize(mSwapchainImageViews.size());
@@ -165,7 +123,7 @@ bool Renderer::initialize() {
 
         VkFramebufferCreateInfo framebufferInfo = {};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = mRenderPass;
+        framebufferInfo.renderPass = mPipeline->getRenderPass();
         framebufferInfo.attachmentCount = 1;
         framebufferInfo.pAttachments = attachments;
         framebufferInfo.width = mSwapchainExtent.width;
@@ -178,161 +136,6 @@ bool Renderer::initialize() {
         }
     }
     LOGI("Vulkan Framebuffers created successfully!");
-
-    // 11.2 Descriptor Set Layout 생성
-    VkDescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    uboLayoutBinding.pImmutableSamplers = nullptr;
-
-    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo{};
-    descriptorLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorLayoutInfo.bindingCount = 1;
-    descriptorLayoutInfo.pBindings = &uboLayoutBinding;
-
-    if (vkCreateDescriptorSetLayout(mContext->getDevice(), &descriptorLayoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS) {
-        LOGE("Failed to create descriptor set layout");
-        return false;
-    }
-
-    //12. Graphics Pipeline 생성
-    // --- Shader Modules ---
-    auto vertCode= AssetUtils::loadSpirvFromAssets(
-            mApp->activity->assetManager,"shaders/vert.spv");
-
-    auto fragCode= AssetUtils::loadSpirvFromAssets(
-            mApp->activity->assetManager,"shaders/frag.spv");
-
-    VkShaderModule vertShader = VulkanUtils::createShaderModule(mContext->getDevice(), vertCode);
-    VkShaderModule fragShader = VulkanUtils::createShaderModule(mContext->getDevice(), fragCode);
-
-    VkPipelineShaderStageCreateInfo vertStage{};
-    vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertStage.module = vertShader;
-    vertStage.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragStage{};
-    fragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragStage.module = fragShader;
-    fragStage.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = { vertStage, fragStage };
-
-// --- Vertex Input ---
-    auto bindingDescription = Vertex::getBindingDescription();
-    auto attributeDescriptions = Vertex::getAttributeDescriptions();
-    VkPipelineVertexInputStateCreateInfo vertexInput{};
-    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount = 1;
-    vertexInput.pVertexBindingDescriptions = &bindingDescription;
-    vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInput.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-// --- Input Assembly ---
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-// --- Viewport & Scissor ---
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width  = (float)mSwapchainExtent.width;
-    viewport.height = (float)mSwapchainExtent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = mSwapchainExtent;
-
-    VkPipelineViewportStateCreateInfo viewportState{};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.pViewports = &viewport;
-    viewportState.scissorCount = 1;
-    viewportState.pScissors = &scissor;
-
-// --- Rasterizer ---
-    VkPipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizer.lineWidth = 1.0f;
-
-// --- Multisampling ---
-    VkPipelineMultisampleStateCreateInfo multisampling{};
-    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-// --- Color Blend ---
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask =
-            VK_COLOR_COMPONENT_R_BIT |
-            VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT |
-            VK_COLOR_COMPONENT_A_BIT;
-
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
-
-    // --- Depth Stencil (명시적 비활성화) ---
-    VkPipelineDepthStencilStateCreateInfo depthStencil{};
-    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-
-    // --- Dynamic State (뷰포트 반전을 위해 필수) ---
-    std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-    VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
-    dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicStateInfo.pDynamicStates = dynamicStates.data();
-
-
-// --- Pipeline Layout ---
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &mDescriptorSetLayout;
-
-    if (vkCreatePipelineLayout(mContext->getDevice(), &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS) {
-        LOGE("Failed to create pipeline layout");
-        return false;
-    }
-
-// --- Graphics Pipeline ---
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInput;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDepthStencilState = &depthStencil;
-    pipelineInfo.pDynamicState = &dynamicStateInfo;
-    pipelineInfo.layout = mPipelineLayout;
-    pipelineInfo.renderPass = mRenderPass;
-    pipelineInfo.subpass = 0;
-
-    if (vkCreateGraphicsPipelines(
-            mContext->getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo,
-            nullptr, &mGraphicsPipeline) != VK_SUCCESS) {
-        LOGE("Failed to create graphics pipeline");
-        return false;
-    }
-
-    vkDestroyShaderModule(mContext->getDevice(), fragShader, nullptr);
-    vkDestroyShaderModule(mContext->getDevice(), vertShader, nullptr);
-    LOGI("Vulkan Graphics Pipeline created successfully!");
 
     // 13. Command Pool 생성
     VkCommandPoolCreateInfo poolInfo{};
@@ -407,7 +210,7 @@ bool Renderer::initialize() {
     }
 
     // 18. Descriptor Sets 할당 및 업데이트
-    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, mDescriptorSetLayout);
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, mPipeline->getDescriptorSetLayout());
     VkDescriptorSetAllocateInfo allocInfoDesc{};
     allocInfoDesc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfoDesc.descriptorPool = mDescriptorPool;
@@ -460,29 +263,14 @@ Renderer::~Renderer() {
             vkDestroyDescriptorPool(mContext->getDevice(), mDescriptorPool, nullptr);
         }
 
-        if (mDescriptorSetLayout != VK_NULL_HANDLE) {
-            vkDestroyDescriptorSetLayout(mContext->getDevice(), mDescriptorSetLayout, nullptr);
-        }
-
         if (mCommandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(mContext->getDevice(), mCommandPool, nullptr);
-        }
-
-        if (mGraphicsPipeline != VK_NULL_HANDLE) {
-            vkDestroyPipeline(mContext->getDevice(), mGraphicsPipeline, nullptr);
-        }
-        if (mPipelineLayout != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(mContext->getDevice(), mPipelineLayout, nullptr);
         }
 
         for (auto framebuffer : mSwapchainFramebuffers) {
             vkDestroyFramebuffer(mContext->getDevice(), framebuffer, nullptr);
         }
         mSwapchainFramebuffers.clear();
-
-        if (mRenderPass != VK_NULL_HANDLE) {
-            vkDestroyRenderPass(mContext->getDevice(), mRenderPass, nullptr);
-        }
 
         for (auto imageView : mSwapchainImageViews) {
             vkDestroyImageView(mContext->getDevice(), imageView, nullptr);
@@ -505,7 +293,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = mRenderPass;
+    renderPassInfo.renderPass = mPipeline->getRenderPass();
     renderPassInfo.framebuffer = mSwapchainFramebuffers[imageIndex];
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = mSwapchainExtent;
@@ -515,14 +303,14 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     renderPassInfo.pClearValues = &clearColor;
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getGraphicsPipeline());
 
     VkBuffer vertexBuffers[] = { mVertexBuffer->getBuffer() };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
     // Descriptor Set 바인딩 (UBO 데이터 연결)
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineLayout, 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getPipelineLayout(), 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
 
     // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
     VkViewport viewport{};
@@ -726,7 +514,7 @@ void Renderer::recreateSwapchain() {
     for (size_t i = 0; i < imageCount; i++) {
         VkImageView attachments[] = { mSwapchainImageViews[i] };
         VkFramebufferCreateInfo fbInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-        fbInfo.renderPass = mRenderPass;
+        fbInfo.renderPass = mPipeline->getRenderPass();
         fbInfo.attachmentCount = 1;
         fbInfo.pAttachments = attachments;
         fbInfo.width = mSwapchainExtent.width;

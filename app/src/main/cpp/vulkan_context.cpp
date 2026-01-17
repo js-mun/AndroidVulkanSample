@@ -1,7 +1,3 @@
-//
-// Created by mj on 1/11/26.
-//
-
 #include "vulkan_context.h"
 #include "Log.h"
 

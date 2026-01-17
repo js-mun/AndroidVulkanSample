@@ -1,18 +1,4 @@
-//
-// Created by mj on 1/11/26.
-//
-
-#ifndef MYGAME_VULKAN_CONTEXT_H
-#define MYGAME_VULKAN_CONTEXT_H
-
-//// 안드로이드 전용 확장 기능을 활성화 (volk.h 전에 선언)
-//#ifndef VK_USE_PLATFORM_ANDROID_KHR
-//#define VK_USE_PLATFORM_ANDROID_KHR
-//#endif
-//// Vulkan 함수를 직접(정적) 호출하지 않고, volk를 통해 동적 로드 (volk.h 전에 선언)
-//#ifndef VK_NO_PROTOTYPES
-//#define VK_NO_PROTOTYPES
-//#endif
+#pragma once
 
 #include "volk.h"
 #include <game-activity/native_app_glue/android_native_app_glue.h>
@@ -52,4 +38,3 @@ private:
     bool createLogicalDevice();
 };
 
-#endif //MYGAME_VULKAN_CONTEXT_H
