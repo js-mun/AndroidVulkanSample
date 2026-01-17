@@ -39,36 +39,17 @@ bool Renderer::initialize() {
         return false;
     }
 
-    // 13. Command Pool 생성
-    VkCommandPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.queueFamilyIndex = mContext->getGraphicsQueueFamilyIndex();
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-    if (vkCreateCommandPool(mContext->getDevice(), &poolInfo, nullptr, &mCommandPool) != VK_SUCCESS) {
-        LOGE("Failed to create command pool");
-        return false;
-    }
-
     mSync = std::make_unique<VulkanSync>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
     if (!mSync->initialize()) {
         LOGE("Failed to initialize VulkanSync");
         return false;
     }
 
-    // 14. Command Buffers 할당
-    mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = mCommandPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)mCommandBuffers.size();
-
-    if (vkAllocateCommandBuffers(mContext->getDevice(), &allocInfo, mCommandBuffers.data()) != VK_SUCCESS) {
-        LOGE("Failed to allocate command buffers");
+    mCommand = std::make_unique<VulkanCommand>(mContext->getDevice(), mContext->getGraphicsQueueFamilyIndex());
+    if (!mCommand->initialize(MAX_FRAMES_IN_FLIGHT)) {
+        LOGE("Failed to initialize VulkanCommand");
         return false;
     }
-
 
     // 16. Uniform Buffers 생성
     mUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -144,21 +125,10 @@ Renderer::~Renderer() {
         if (mDescriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(mContext->getDevice(), mDescriptorPool, nullptr);
         }
-        if (mCommandPool != VK_NULL_HANDLE) {
-            vkDestroyCommandPool(mContext->getDevice(), mCommandPool, nullptr);
-        }
-
     }
 }
 
 void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-        LOGE("Failed to begin recording command buffer");
-    }
-
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = mPipeline->getRenderPass();
@@ -199,10 +169,6 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
-
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-        LOGE("Failed to record command buffer");
-    }
 }
 
 void Renderer::createVertexBuffer() {
@@ -251,11 +217,13 @@ void Renderer::render() {
         return;
     }
 
-    // 3. 커맨드 버퍼 기록
-    vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
-    recordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex);
+    // 커맨드 버퍼 기록
+    mCommand->reset(mCurrentFrame);
+    mCommand->begin(mCurrentFrame, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    recordCommandBuffer(mCommand->getBuffer(mCurrentFrame), imageIndex);
+    mCommand->end(mCurrentFrame);
 
-    // 4. GPU 큐에 제출
+    // GPU 큐에 제출
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -265,8 +233,9 @@ void Renderer::render() {
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
 
+    VkCommandBuffer commandBuffer = mCommand->getBuffer(mCurrentFrame);
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &mCommandBuffers[mCurrentFrame];
+    submitInfo.pCommandBuffers = &commandBuffer;
 
     VkSemaphore signalSemaphores[] = {mSync->getRenderFinishedSemaphore(mCurrentFrame)};
     submitInfo.signalSemaphoreCount = 1;
@@ -276,7 +245,7 @@ void Renderer::render() {
         LOGE("Failed to submit draw command buffer");
     }
 
-    // 5. 화면에 표시 (Present)
+    // 화면에 표시 (Present)
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
@@ -293,7 +262,7 @@ void Renderer::render() {
         mSwapchain->recreate(mPipeline->getRenderPass());
     }
 
-    // 6. 다음 프레임 인덱스로 교체
+    // 다음 프레임 인덱스로 교체
     mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 

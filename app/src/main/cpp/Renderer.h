@@ -2,6 +2,7 @@
 
 #include "volk.h"
 #include "vulkan_buffer.h"
+#include "vulkan_command.h"
 #include "vulkan_context.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_swapchain.h"
@@ -28,9 +29,7 @@ private:
     std::unique_ptr<VulkanSwapchain> mSwapchain;
     std::unique_ptr<VulkanPipeline> mPipeline;
     std::unique_ptr<VulkanSync> mSync;
-
-    VkCommandPool mCommandPool = VK_NULL_HANDLE;
-    std::vector<VkCommandBuffer> mCommandBuffers;
+    std::unique_ptr<VulkanCommand> mCommand;
 
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;
