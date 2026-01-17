@@ -1,6 +1,12 @@
 #pragma once
 
 #include "volk.h"
+#include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <vector>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include "camera.h"
 #include "vulkan_buffer.h"
 #include "vulkan_command.h"
 #include "vulkan_context.h"
@@ -8,11 +14,6 @@
 #include "vulkan_pipeline.h"
 #include "vulkan_swapchain.h"
 #include "vulkan_sync.h"
-
-#include <game-activity/native_app_glue/android_native_app_glue.h>
-#include <vector>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 class Renderer {
 public:
@@ -32,6 +33,8 @@ private:
     std::unique_ptr<VulkanSync> mSync;
     std::unique_ptr<VulkanCommand> mCommand;
     std::unique_ptr<VulkanDescriptor> mDescriptor;
+
+    std::unique_ptr<Camera> mCamera;
 
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;

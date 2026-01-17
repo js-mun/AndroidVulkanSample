@@ -68,6 +68,8 @@ bool Renderer::initialize() {
         return false;
     }
 
+    mCamera = std::make_unique<Camera>();
+
     createVertexBuffer();
 
     LOGI("Vulkan Initialization Wrap-up Successful!");
@@ -222,34 +224,12 @@ void Renderer::render() {
 }
 
 void Renderer::updateUniformBuffer(uint32_t currentImage) {
+    mCamera->update(mSwapchain->getExtent().width,
+                    mSwapchain->getExtent().height,
+                    mSwapchain->getTransform());
+
     UniformBufferObject ubo{};
-    ubo.mvp = glm::mat4(1.0f);
-
-    // 1. 기기 회전(Surface Transform) 보정
-    // 기기가 물리적으로 돌아간 만큼 반대 방향으로 회전 행렬을 적용합니다.
-    if (mSwapchain->getTransform() == VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR) {
-        ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    } else if (mSwapchain->getTransform() == VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR) {
-        ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    } else if (mSwapchain->getTransform() == VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
-        ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-270.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    }
-
-    // 2. 종횡비 보정 (가장 안정적인 'Short-side' 기준 방식)
-    // 물리적 해상도를 가져옵니다.
-    float width = static_cast<float>(mSwapchain->getExtent().width);
-    float height = static_cast<float>(mSwapchain->getExtent().height);
-
-    // 화면의 가로/세로 중 짧은 쪽 길이를 기준으로 잡습니다.
-    float minDim = std::min(width, height);
-
-    // [핵심] 짧은 쪽 길이에 맞춰 전체 좌표계를 정사각형 박스로 만듭니다.
-    // 이렇게 하면 어떤 회전 상태에서도 삼각형이 찌그러지지 않고 동일한 크기를 유지합니다.
-    ubo.mvp = glm::scale(ubo.mvp, glm::vec3(minDim / width, minDim / height, 1.0f));
-
-    // 3. 전체 크기 조정
-    ubo.mvp = glm::scale(ubo.mvp, glm::vec3(1.0f, 1.0f, 1.0f));
-
+    ubo.mvp = mCamera->getMVPMatrix();
     // GPU 메모리로 복사
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
 }
