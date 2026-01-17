@@ -50,6 +50,12 @@ bool Renderer::initialize() {
         return false;
     }
 
+    mSync = std::make_unique<VulkanSync>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
+    if (!mSync->initialize()) {
+        LOGE("Failed to initialize VulkanSync");
+        return false;
+    }
+
     // 14. Command Buffers 할당
     mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
     VkCommandBufferAllocateInfo allocInfo{};
@@ -63,26 +69,6 @@ bool Renderer::initialize() {
         return false;
     }
 
-    // 15. 동기화 객체 생성 (Semaphores & Fences)
-    mImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    mRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    mInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-
-    VkSemaphoreCreateInfo semaphoreInfo{};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (vkCreateSemaphore(mContext->getDevice(), &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(mContext->getDevice(), &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]) != VK_SUCCESS ||
-            vkCreateFence(mContext->getDevice(), &fenceInfo, nullptr, &mInFlightFences[i]) != VK_SUCCESS) {
-            LOGE("Failed to create synchronization objects for a frame");
-            return false;
-        }
-    }
 
     // 16. Uniform Buffers 생성
     mUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -152,14 +138,8 @@ bool Renderer::initialize() {
 
 Renderer::~Renderer() {
     // Device 레벨 객체들 해제
-    if (mContext->getDevice() != VK_NULL_HANDLE) {
+    if (mContext && mContext->getDevice() != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(mContext->getDevice()); // 모든 작업(GPU)이 끝날 때까지 대기
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroySemaphore(mContext->getDevice(), mRenderFinishedSemaphores[i], nullptr);
-            vkDestroySemaphore(mContext->getDevice(), mImageAvailableSemaphores[i], nullptr);
-            vkDestroyFence(mContext->getDevice(), mInFlightFences[i], nullptr);
-        }
 
         if (mDescriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(mContext->getDevice(), mDescriptorPool, nullptr);
@@ -251,16 +231,17 @@ void Renderer::render() {
         return;
     }
 
-    // 1. 이전 프레임 작업이 끝날 때까지 대기
-    vkWaitForFences(mContext->getDevice(), 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
-    vkResetFences(mContext->getDevice(), 1, &mInFlightFences[mCurrentFrame]);
+    // 이전 프레임 작업이 끝날 때까지 대기
+    VkFence inFlightFence = mSync->getInFlightFence(mCurrentFrame);
+    vkWaitForFences(mContext->getDevice(), 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(mContext->getDevice(), 1, &inFlightFence);
 
     // Uniform Buffer 업데이트 (회전 및 종횡비 계산)
     updateUniformBuffer(mCurrentFrame);
 
-    // 2. 스왑체인에서 이미지 가져오기
+    // 스왑체인에서 이미지 가져오기
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(mContext->getDevice(), mSwapchain->getSwapchain(), UINT64_MAX, mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(mContext->getDevice(), mSwapchain->getSwapchain(), UINT64_MAX, mSync->getImageAvailableSemaphore(mCurrentFrame), VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         LOGI("Failed to acquire next image by VK_ERROR_OUT_OF_DATE_KHR");
         mSwapchain->recreate(mPipeline->getRenderPass());
@@ -278,7 +259,7 @@ void Renderer::render() {
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = {mImageAvailableSemaphores[mCurrentFrame]};
+    VkSemaphore waitSemaphores[] = {mSync->getImageAvailableSemaphore(mCurrentFrame)};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
@@ -287,11 +268,11 @@ void Renderer::render() {
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &mCommandBuffers[mCurrentFrame];
 
-    VkSemaphore signalSemaphores[] = {mRenderFinishedSemaphores[mCurrentFrame]};
+    VkSemaphore signalSemaphores[] = {mSync->getRenderFinishedSemaphore(mCurrentFrame)};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(mContext->getGraphicsQueue(), 1, &submitInfo, mInFlightFences[mCurrentFrame]) != VK_SUCCESS) {
+    if (vkQueueSubmit(mContext->getGraphicsQueue(), 1, &submitInfo, mSync->getInFlightFence(mCurrentFrame)) != VK_SUCCESS) {
         LOGE("Failed to submit draw command buffer");
     }
 

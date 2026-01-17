@@ -5,6 +5,7 @@
 #include "vulkan_context.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_swapchain.h"
+#include "vulkan_sync.h"
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <vector>
@@ -26,13 +27,11 @@ private:
     std::unique_ptr<VulkanContext> mContext;
     std::unique_ptr<VulkanSwapchain> mSwapchain;
     std::unique_ptr<VulkanPipeline> mPipeline;
+    std::unique_ptr<VulkanSync> mSync;
 
     VkCommandPool mCommandPool = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> mCommandBuffers;
 
-    std::vector<VkSemaphore> mImageAvailableSemaphores;
-    std::vector<VkSemaphore> mRenderFinishedSemaphores;
-    std::vector<VkFence> mInFlightFences;
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -44,8 +43,6 @@ private:
 
 private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-    void cleanupSwapchain();
-    void recreateSwapchain();
 
     void updateUniformBuffer(uint32_t currentImage);
     void createVertexBuffer();
