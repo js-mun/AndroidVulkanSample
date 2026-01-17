@@ -692,7 +692,10 @@ void Renderer::createVertexBuffer() {
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
+    // 1회성 정점 데이터이며, 사전에 map() 없이 copyTo()호출 시, 내부에서 map() -> copy -> unmap() 발생
+    mVertexBuffer->map();
     mVertexBuffer->copyTo(vertices.data(), size);
+    mVertexBuffer->unmap();
 }
 
 void Renderer::render() {
