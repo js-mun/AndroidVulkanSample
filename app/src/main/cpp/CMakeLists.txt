@@ -21,6 +21,7 @@ add_library(mygame SHARED
         vulkan_buffer.cpp
         vulkan_context.cpp
         vulkan_pipeline.cpp
+        vulkan_swapchain.cpp
 )
 
 add_library(volk STATIC third_party/volk/volk.c)

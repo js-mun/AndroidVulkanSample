@@ -1,9 +1,10 @@
 #pragma once
 
 #include "volk.h"
-#include "vulkan_context.h"
 #include "vulkan_buffer.h"
+#include "vulkan_context.h"
 #include "vulkan_pipeline.h"
+#include "vulkan_swapchain.h"
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <vector>
@@ -23,16 +24,8 @@ public:
 private:
     android_app* mApp;
     std::unique_ptr<VulkanContext> mContext;
+    std::unique_ptr<VulkanSwapchain> mSwapchain;
     std::unique_ptr<VulkanPipeline> mPipeline;
-
-    VkSwapchainKHR mSwapchain = VK_NULL_HANDLE;
-    std::vector<VkImage> mSwapchainImages;
-    VkFormat mSwapchainImageFormat;
-    VkExtent2D mSwapchainExtent;
-    VkSurfaceTransformFlagBitsKHR mSwapchainTransform; // 스왑체인 회전 상태 저장
-    std::vector<VkImageView> mSwapchainImageViews;
-
-    std::vector<VkFramebuffer> mSwapchainFramebuffers;
 
     VkCommandPool mCommandPool = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> mCommandBuffers;

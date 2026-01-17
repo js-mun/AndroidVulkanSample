@@ -7,7 +7,6 @@
 #include <chrono>
 
 Renderer::Renderer(struct android_app *app) : mApp(app) {
-    mContext = std::make_unique<VulkanContext>(mApp);
 }
 
 bool Renderer::initialize() {
@@ -17,125 +16,28 @@ bool Renderer::initialize() {
         return false;
     }
 
+    mContext = std::make_unique<VulkanContext>(mApp);
     if (!mContext->initialize()) {
         LOGE("Failed to initialize VulkanContext");
         return false;
     }
 
-    // 8. Swapchain 생성
-    // Surface 성능 및 포맷 확인
-    VkSurfaceCapabilitiesKHR capabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-            mContext->getPhysicalDevice(), mContext->getSurface(), &capabilities);
-    // 해상도 설정 (window 크기에 맞춤)
-    mSwapchainExtent = capabilities.currentExtent;
-    mSwapchainTransform = capabilities.currentTransform; // 회전 상태 저장 추가
-
-    LOGI("Surface Current Extent: %u x %u", mSwapchainExtent.width, mSwapchainExtent.height);
-    // 최소 이미지 개수 설정 (Double Buffering 이상)
-    LOGI("Surface Capabilities: minImageCount=%u, maxImageCount=%u", capabilities.minImageCount, capabilities.maxImageCount);
-    uint32_t imageCount = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
-        imageCount = capabilities.maxImageCount;
-    }
-    LOGI("Selected image count: %d", imageCount);
-
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(mContext->getPhysicalDevice(), mContext->getSurface(),&formatCount, nullptr);
-        std::vector<VkSurfaceFormatKHR> formats(formatCount);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(mContext->getPhysicalDevice(), mContext->getSurface(),
-        &formatCount, formats.data());
-
-    // 최적의 포맷 선택 (보통 B8G8R8A8_UNORM 또는 R8G8B8A8_UNORM)
-    VkSurfaceFormatKHR surfaceFormat = formats[0];
-    LOGI("Found %zu surface format(s):", formats.size());
-    for (const auto& availableFormat : formats) {
-        LOGI("  - Format: %d, ColorSpace: %d", availableFormat.format, availableFormat.colorSpace);
-        if ((availableFormat.format == VK_FORMAT_R8G8B8A8_UNORM ||
-             availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM) &&
-            availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            surfaceFormat = availableFormat;
-            break;
-        }
-    }
-    mSwapchainImageFormat = surfaceFormat.format;
-    LOGI("Selected final format: %d", surfaceFormat.format);
-
-    VkSwapchainCreateInfoKHR swapchainCreateInfo = {};
-    swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchainCreateInfo.surface = mContext->getSurface();
-    swapchainCreateInfo.minImageCount = imageCount;
-    swapchainCreateInfo.imageFormat = surfaceFormat.format;
-    swapchainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
-    swapchainCreateInfo.imageExtent = mSwapchainExtent;
-    swapchainCreateInfo.imageArrayLayers = 1;
-    swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchainCreateInfo.preTransform = capabilities.currentTransform;
-    swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // V-Sync 활성화
-    swapchainCreateInfo.clipped = VK_TRUE;
-
-    if (vkCreateSwapchainKHR(mContext->getDevice(), &swapchainCreateInfo, nullptr, &mSwapchain) != VK_SUCCESS) {
-        LOGE("Failed to create Swapchain");
+    mSwapchain = std::make_unique<VulkanSwapchain>(mContext.get());
+    if (!mSwapchain->createSwapchainAndViews()) {
+        LOGE("Failed to initialize VulkanSwapchain(Swapchain and Views)");
         return false;
     }
 
-    // 스왑체인 이미지 가져오기
-    vkGetSwapchainImagesKHR(mContext->getDevice(), mSwapchain, &imageCount, nullptr);
-    mSwapchainImages.resize(imageCount);
-    vkGetSwapchainImagesKHR(mContext->getDevice(), mSwapchain, &imageCount, mSwapchainImages.data());
-
-    // 9. Image Views 생성 (이미지에 접근하기 위한 통로)
-    mSwapchainImageViews.resize(mSwapchainImages.size());
-    for (size_t i = 0; i < mSwapchainImages.size(); i++) {
-        VkImageViewCreateInfo viewInfo = {};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = mSwapchainImages[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = mSwapchainImageFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(mContext->getDevice(), &viewInfo, nullptr, &mSwapchainImageViews[i]) != VK_SUCCESS) {
-            LOGE("Failed to create Swapchain ImageView [%zu]", i);
-            return false;
-        }
-    }
-    LOGI("Vulkan Swapchain and ImageViews created successfully!");
-
     mPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
-    if (!mPipeline->initialize(mSwapchainImageFormat, mApp->activity->assetManager)) {
+    if (!mPipeline->initialize(mSwapchain->getImageFormat(), mApp->activity->assetManager)) {
         LOGE("Failed to initialize Vulkan Pipeline");
         return false;
     }
 
-    // 11. Framebuffers 생성
-    mSwapchainFramebuffers.resize(mSwapchainImageViews.size());
-
-    for (size_t i = 0; i < mSwapchainImageViews.size(); i++) {
-        VkImageView attachments[] = {
-                mSwapchainImageViews[i]
-        };
-
-        VkFramebufferCreateInfo framebufferInfo = {};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = mPipeline->getRenderPass();
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = mSwapchainExtent.width;
-        framebufferInfo.height = mSwapchainExtent.height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(mContext->getDevice(), &framebufferInfo, nullptr, &mSwapchainFramebuffers[i]) != VK_SUCCESS) {
-            LOGE("Failed to create Framebuffer [%zu]", i);
-            return false;
-        }
+    if (!mSwapchain->createFramebuffers(mPipeline->getRenderPass())) {
+        LOGE("Failed to initialize VulkanSwapchain(Framebuffers)");
+        return false;
     }
-    LOGI("Vulkan Framebuffers created successfully!");
 
     // 13. Command Pool 생성
     VkCommandPoolCreateInfo poolInfo{};
@@ -251,7 +153,7 @@ bool Renderer::initialize() {
 Renderer::~Renderer() {
     // Device 레벨 객체들 해제
     if (mContext->getDevice() != VK_NULL_HANDLE) {
-        vkDeviceWaitIdle(mContext->getDevice()); // 모든 작업이 끝날 때까지 대기
+        vkDeviceWaitIdle(mContext->getDevice()); // 모든 작업(GPU)이 끝날 때까지 대기
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(mContext->getDevice(), mRenderFinishedSemaphores[i], nullptr);
@@ -262,24 +164,10 @@ Renderer::~Renderer() {
         if (mDescriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(mContext->getDevice(), mDescriptorPool, nullptr);
         }
-
         if (mCommandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(mContext->getDevice(), mCommandPool, nullptr);
         }
 
-        for (auto framebuffer : mSwapchainFramebuffers) {
-            vkDestroyFramebuffer(mContext->getDevice(), framebuffer, nullptr);
-        }
-        mSwapchainFramebuffers.clear();
-
-        for (auto imageView : mSwapchainImageViews) {
-            vkDestroyImageView(mContext->getDevice(), imageView, nullptr);
-        }
-        mSwapchainImageViews.clear();
-
-        if (mSwapchain != VK_NULL_HANDLE) {
-            vkDestroySwapchainKHR(mContext->getDevice(), mSwapchain, nullptr);
-        }
     }
 }
 
@@ -294,9 +182,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = mPipeline->getRenderPass();
-    renderPassInfo.framebuffer = mSwapchainFramebuffers[imageIndex];
+    renderPassInfo.framebuffer = mSwapchain->getFramebuffers()[imageIndex];
     renderPassInfo.renderArea.offset = {0, 0};
-    renderPassInfo.renderArea.extent = mSwapchainExtent;
+    renderPassInfo.renderArea.extent = mSwapchain->getExtent();
 
     VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
     renderPassInfo.clearValueCount = 1;
@@ -315,16 +203,16 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
     VkViewport viewport{};
     viewport.x = 0.0f;
-    viewport.y = (float)mSwapchainExtent.height;
-    viewport.width = (float)mSwapchainExtent.width;
-    viewport.height = -(float)mSwapchainExtent.height;
+    viewport.y = (float)mSwapchain->getExtent().height;
+    viewport.width = (float)mSwapchain->getExtent().width;
+    viewport.height = -(float)mSwapchain->getExtent().height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = mSwapchainExtent;
+    scissor.extent = mSwapchain->getExtent();
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // 삼각형 그리기 (정점 3개)
@@ -359,7 +247,7 @@ void Renderer::render() {
     if (mFramebufferResized) {
         LOGI("Buffer resized");
         mFramebufferResized = false;
-        recreateSwapchain();
+        mSwapchain->recreate(mPipeline->getRenderPass());
         return;
     }
 
@@ -372,10 +260,10 @@ void Renderer::render() {
 
     // 2. 스왑체인에서 이미지 가져오기
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(mContext->getDevice(), mSwapchain, UINT64_MAX, mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(mContext->getDevice(), mSwapchain->getSwapchain(), UINT64_MAX, mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         LOGI("Failed to acquire next image by VK_ERROR_OUT_OF_DATE_KHR");
-        recreateSwapchain();
+        mSwapchain->recreate(mPipeline->getRenderPass());
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         LOGE("Failed to acquire swapchain image!");
@@ -413,7 +301,7 @@ void Renderer::render() {
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
 
-    VkSwapchainKHR swapchains[] = {mSwapchain};
+    VkSwapchainKHR swapchains[] = {mSwapchain->getSwapchain()};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapchains;
     presentInfo.pImageIndices = &imageIndex;
@@ -421,109 +309,11 @@ void Renderer::render() {
     result = vkQueuePresentKHR(mContext->getGraphicsQueue(), &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         LOGI("Failed to queue present by VK_ERROR_OUT_OF_DATE_KHR");
-        recreateSwapchain();
+        mSwapchain->recreate(mPipeline->getRenderPass());
     }
 
     // 6. 다음 프레임 인덱스로 교체
     mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-void Renderer::cleanupSwapchain() {
-    // 1. 프레임버퍼 해제
-    for (auto framebuffer : mSwapchainFramebuffers) {
-        vkDestroyFramebuffer(mContext->getDevice(), framebuffer, nullptr);
-    }
-    mSwapchainFramebuffers.clear();
-
-    // 2. 이미지 뷰 해제
-    for (auto imageView : mSwapchainImageViews) {
-        vkDestroyImageView(mContext->getDevice(), imageView, nullptr);
-    }
-    mSwapchainImageViews.clear();
-
-    // 3. 스왑체인 파괴
-    if (mSwapchain != VK_NULL_HANDLE) {
-        vkDestroySwapchainKHR(mContext->getDevice(), mSwapchain, nullptr);
-        mSwapchain = VK_NULL_HANDLE;
-    }
-}
-
-void Renderer::recreateSwapchain() {
-    // 윈도우가 최소화되어 있거나 크기가 0이면 대기
-    if (mApp->window == nullptr) return;
-
-    vkDeviceWaitIdle(mContext->getDevice());
-
-    // 기존 자원 정리
-    cleanupSwapchain();
-
-    // 1. 스왑체인 다시 생성 (initialize()의 8번 로직 재사용)
-    VkSurfaceCapabilitiesKHR capabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mContext->getPhysicalDevice(), mContext->getSurface(), &capabilities);
-    mSwapchainExtent = capabilities.currentExtent;
-    mSwapchainTransform = capabilities.currentTransform; // 회전 상태 업데이트
-
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(mContext->getPhysicalDevice(), mContext->getSurface(), &formatCount, nullptr);
-    std::vector<VkSurfaceFormatKHR> formats(formatCount);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(mContext->getPhysicalDevice(), mContext->getSurface(), &formatCount, formats.data());
-    VkSurfaceFormatKHR surfaceFormat = formats[0];
-    for (const auto& f : formats) {
-        if (f.format == mSwapchainImageFormat) { // 기존 포맷 유지
-            surfaceFormat = f; break;
-        }
-    }
-
-    VkSwapchainCreateInfoKHR swapchainInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
-    swapchainInfo.surface = mContext->getSurface();
-    swapchainInfo.minImageCount = capabilities.minImageCount + 1;
-    swapchainInfo.imageFormat = surfaceFormat.format;
-    swapchainInfo.imageColorSpace = surfaceFormat.colorSpace;
-    swapchainInfo.imageExtent = mSwapchainExtent;
-    swapchainInfo.imageArrayLayers = 1;
-    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchainInfo.preTransform = capabilities.currentTransform;
-    swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    swapchainInfo.clipped = VK_TRUE;
-
-    if (vkCreateSwapchainKHR(mContext->getDevice(), &swapchainInfo, nullptr, &mSwapchain) != VK_SUCCESS) {
-        LOGE("Failed to recreate Swapchain");
-        return;
-    }
-
-    // 2. 이미지 및 이미지 뷰 다시 생성 (initialize()의 9번 로직)
-    uint32_t imageCount;
-    vkGetSwapchainImagesKHR(mContext->getDevice(), mSwapchain, &imageCount, nullptr);
-    mSwapchainImages.resize(imageCount);
-    vkGetSwapchainImagesKHR(mContext->getDevice(), mSwapchain, &imageCount, mSwapchainImages.data());
-
-    mSwapchainImageViews.resize(imageCount);
-    for (size_t i = 0; i < imageCount; i++) {
-        VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        viewInfo.image = mSwapchainImages[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = mSwapchainImageFormat;
-        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-        vkCreateImageView(mContext->getDevice(), &viewInfo, nullptr, &mSwapchainImageViews[i]);
-    }
-
-    // 3. 프레임버퍼 다시 생성 (initialize()의 11번 로직)
-    mSwapchainFramebuffers.resize(imageCount);
-    for (size_t i = 0; i < imageCount; i++) {
-        VkImageView attachments[] = { mSwapchainImageViews[i] };
-        VkFramebufferCreateInfo fbInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-        fbInfo.renderPass = mPipeline->getRenderPass();
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = attachments;
-        fbInfo.width = mSwapchainExtent.width;
-        fbInfo.height = mSwapchainExtent.height;
-        fbInfo.layers = 1;
-        vkCreateFramebuffer(mContext->getDevice(), &fbInfo, nullptr, &mSwapchainFramebuffers[i]);
-    }
-
-    LOGI("Vulkan Swapchain recreated successfully (New size: %ux%u)", mSwapchainExtent.width, mSwapchainExtent.height);
 }
 
 void Renderer::updateUniformBuffer(uint32_t currentImage) {
@@ -532,18 +322,18 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
 
     // 1. 기기 회전(Surface Transform) 보정
     // 기기가 물리적으로 돌아간 만큼 반대 방향으로 회전 행렬을 적용합니다.
-    if (mSwapchainTransform == VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR) {
+    if (mSwapchain->getTransform() == VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR) {
         ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    } else if (mSwapchainTransform == VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR) {
+    } else if (mSwapchain->getTransform() == VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR) {
         ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    } else if (mSwapchainTransform == VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
+    } else if (mSwapchain->getTransform() == VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
         ubo.mvp = glm::rotate(ubo.mvp, glm::radians(-270.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     }
 
     // 2. 종횡비 보정 (가장 안정적인 'Short-side' 기준 방식)
     // 물리적 해상도를 가져옵니다.
-    float width = static_cast<float>(mSwapchainExtent.width);
-    float height = static_cast<float>(mSwapchainExtent.height);
+    float width = static_cast<float>(mSwapchain->getExtent().width);
+    float height = static_cast<float>(mSwapchain->getExtent().height);
 
     // 화면의 가로/세로 중 짧은 쪽 길이를 기준으로 잡습니다.
     float minDim = std::min(width, height);
