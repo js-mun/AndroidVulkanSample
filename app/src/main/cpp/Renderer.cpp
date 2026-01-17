@@ -99,10 +99,6 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getGraphicsPipeline());
 
-    VkBuffer vertexBuffers[] = { mVertexBuffer->getBuffer() };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-
     // Descriptor Set 바인딩 (UBO 데이터 연결)
     VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
@@ -123,7 +119,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // 삼각형 그리기 (정점 3개)
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    mMesh->draw(commandBuffer);
 
     vkCmdEndRenderPass(commandBuffer);
 }
@@ -135,15 +131,7 @@ void Renderer::createVertexBuffer() {
             {{0.5f, -0.5f}}   // 오른쪽 아래
     };
 
-    // 1. 스테이징 버퍼(CPU용) 생성 없이 간단히 직접 생성 (학습용)
-    VkDeviceSize size = sizeof(Vertex) * vertices.size();
-    mVertexBuffer = std::make_unique<VulkanBuffer>(
-            mContext->getDevice(), mContext->getPhysicalDevice(), size,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-    // 1회성 정점 데이터이며 내부에서 map() -> copy -> unmap() 수행
-    mVertexBuffer->copyTo(vertices.data(), size);
+    mMesh = std::make_unique<VulkanMesh>(mContext.get(), vertices);
 }
 
 void Renderer::render() {

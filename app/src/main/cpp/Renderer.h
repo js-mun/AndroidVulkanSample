@@ -11,6 +11,7 @@
 #include "vulkan_command.h"
 #include "vulkan_context.h"
 #include "vulkan_descriptor.h"
+#include "vulkan_mesh.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_swapchain.h"
 #include "vulkan_sync.h"
@@ -34,12 +35,13 @@ private:
     std::unique_ptr<VulkanCommand> mCommand;
     std::unique_ptr<VulkanDescriptor> mDescriptor;
 
+    std::unique_ptr<VulkanMesh> mMesh;
+
     std::unique_ptr<Camera> mCamera;
 
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
-    std::unique_ptr<VulkanBuffer> mVertexBuffer;
     std::vector<std::unique_ptr<VulkanBuffer>> mUniformBuffers;
 
 private:

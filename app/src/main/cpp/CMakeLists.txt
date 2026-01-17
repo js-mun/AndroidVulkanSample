@@ -25,6 +25,7 @@ add_library(mygame SHARED
         vulkan_sync.cpp
         vulkan_command.cpp
         vulkan_descriptor.cpp
+        vulkan_mesh.cpp
         camera.cpp
 )
 
