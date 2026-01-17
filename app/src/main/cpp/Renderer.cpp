@@ -62,52 +62,10 @@ bool Renderer::initialize() {
         mUniformBuffers[i]->map();
     }
 
-    // 17. Descriptor Pool 생성
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-    VkDescriptorPoolCreateInfo poolInfoDesc{};
-    poolInfoDesc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfoDesc.poolSizeCount = 1;
-    poolInfoDesc.pPoolSizes = &poolSize;
-    poolInfoDesc.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-    if (vkCreateDescriptorPool(mContext->getDevice(), &poolInfoDesc, nullptr, &mDescriptorPool) != VK_SUCCESS) {
-        LOGE("Failed to create descriptor pool");
+    mDescriptor = std::make_unique<VulkanDescriptor>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
+    if (!mDescriptor->initialize(mPipeline->getDescriptorSetLayout(), mUniformBuffers)) {
+        LOGE("Failed to initialize VulkanDescriptor");
         return false;
-    }
-
-    // 18. Descriptor Sets 할당 및 업데이트
-    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, mPipeline->getDescriptorSetLayout());
-    VkDescriptorSetAllocateInfo allocInfoDesc{};
-    allocInfoDesc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfoDesc.descriptorPool = mDescriptorPool;
-    allocInfoDesc.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-    allocInfoDesc.pSetLayouts = layouts.data();
-
-    mDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-    if (vkAllocateDescriptorSets(mContext->getDevice(), &allocInfoDesc, mDescriptorSets.data()) != VK_SUCCESS) {
-        LOGE("Failed to allocate descriptor sets");
-        return false;
-    }
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkDescriptorBufferInfo bufferInfoUbo{};
-        bufferInfoUbo.buffer = mUniformBuffers[i]->getBuffer();
-        bufferInfoUbo.offset = 0;
-        bufferInfoUbo.range = sizeof(UniformBufferObject);
-
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = mDescriptorSets[i];
-        descriptorWrite.dstBinding = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo = &bufferInfoUbo;
-
-        vkUpdateDescriptorSets(mContext->getDevice(), 1, &descriptorWrite, 0, nullptr);
     }
 
     createVertexBuffer();
@@ -121,10 +79,6 @@ Renderer::~Renderer() {
     // Device 레벨 객체들 해제
     if (mContext && mContext->getDevice() != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(mContext->getDevice()); // 모든 작업(GPU)이 끝날 때까지 대기
-
-        if (mDescriptorPool != VK_NULL_HANDLE) {
-            vkDestroyDescriptorPool(mContext->getDevice(), mDescriptorPool, nullptr);
-        }
     }
 }
 
@@ -148,7 +102,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
     // Descriptor Set 바인딩 (UBO 데이터 연결)
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getPipelineLayout(), 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
+    VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
 
     // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
     VkViewport viewport{};

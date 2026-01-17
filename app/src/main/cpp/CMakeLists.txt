@@ -24,6 +24,7 @@ add_library(mygame SHARED
         vulkan_swapchain.cpp
         vulkan_sync.cpp
         vulkan_command.cpp
+        vulkan_descriptor.cpp
 )
 
 add_library(volk STATIC third_party/volk/volk.c)

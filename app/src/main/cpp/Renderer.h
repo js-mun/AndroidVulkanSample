@@ -4,6 +4,7 @@
 #include "vulkan_buffer.h"
 #include "vulkan_command.h"
 #include "vulkan_context.h"
+#include "vulkan_descriptor.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_swapchain.h"
 #include "vulkan_sync.h"
@@ -30,12 +31,10 @@ private:
     std::unique_ptr<VulkanPipeline> mPipeline;
     std::unique_ptr<VulkanSync> mSync;
     std::unique_ptr<VulkanCommand> mCommand;
+    std::unique_ptr<VulkanDescriptor> mDescriptor;
 
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;
-
-    VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
-    std::vector<VkDescriptorSet> mDescriptorSets;
 
     std::unique_ptr<VulkanBuffer> mVertexBuffer;
     std::vector<std::unique_ptr<VulkanBuffer>> mUniformBuffers;
