@@ -20,16 +20,18 @@ add_library(mygame SHARED
         asset_utils.cpp
         vulkan_utils.cpp
         vulkan_buffer.cpp
+        vulkan_context.cpp
 )
 
 add_library(volk STATIC third_party/volk/volk.c)
 target_include_directories(volk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/volk)
-# Define Android platform for volk compilation
-target_compile_definitions(volk PRIVATE VK_USE_PLATFORM_ANDROID_KHR)
+target_compile_definitions(volk PUBLIC
+        VK_USE_PLATFORM_ANDROID_KHR # 안드로이드 전용 확장 기능 활성화
+        VK_NO_PROTOTYPES            # Vulkan 함수를 직접(정적) 호출하지 않고, volk를 통해 동적 로드
+)
 
 # Dependencies
 find_package(game-activity REQUIRED CONFIG)
-#find_library(vulkan-lib vulkan)
 
 # Forces the linker to keep the JNI entry point for GameActivity
 set(CMAKE_SHARED_LINKER_FLAGS

@@ -70,10 +70,10 @@ void VulkanBuffer::unmap() {
 
 void VulkanBuffer::copyTo(const void* data, VkDeviceSize size) {
     bool alreadyMapped = (mMappedData != nullptr);
-    void *target = alreadyMapped ? mMappedData : nullptr;
+    void *target = alreadyMapped ? mMappedData : map();
 
     if (target != nullptr) {
-        size_t copy_size = (size_t) (size > mSize ? mSize : size);
-        memcpy(target, data, copy_size);
+        memcpy(target, data, (size_t) (size > mSize ? mSize : size));
+        if (!alreadyMapped) unmap();
     }
 }

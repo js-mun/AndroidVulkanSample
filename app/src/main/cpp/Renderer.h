@@ -5,14 +5,15 @@
 #ifndef MYGAME_RENDERER_H
 #define MYGAME_RENDERER_H
 
-#ifndef VK_USE_PLATFORM_ANDROID_KHR
-#define VK_USE_PLATFORM_ANDROID_KHR
-#endif
-#ifndef VK_NO_PROTOTYPES
-#define VK_NO_PROTOTYPES
-#endif
+//#ifndef VK_USE_PLATFORM_ANDROID_KHR
+//#define VK_USE_PLATFORM_ANDROID_KHR
+//#endif
+//#ifndef VK_NO_PROTOTYPES
+//#define VK_NO_PROTOTYPES
+//#endif
 
 #include "volk.h"
+#include "vulkan_context.h"
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <vector>
@@ -58,13 +59,7 @@ public:
 
 private:
     android_app* mApp;
-    VkInstance mInstance = VK_NULL_HANDLE;
-    VkSurfaceKHR mSurface = VK_NULL_HANDLE;
-
-    VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
-    VkDevice mDevice = VK_NULL_HANDLE;
-    VkQueue mGraphicsQueue = VK_NULL_HANDLE;
-    uint32_t mGraphicsQueueFamilyIndex = 0;
+    std::unique_ptr<VulkanContext> mContext;
 
     VkSwapchainKHR mSwapchain = VK_NULL_HANDLE;
     std::vector<VkImage> mSwapchainImages;
