@@ -126,12 +126,18 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 
 void Renderer::createVertexBuffer() {
     std::vector<Vertex> vertices = {
-        {{0.0f, 0.5f, 0.0f}, {0.0f, 0.0f}},
-        {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}
+            {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, // 0: 왼쪽 아래
+            {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, // 1: 오른쪽 아래
+            {{ 0.5f,  0.5f, 0.0f}, {1.0f, 1.0f}}, // 2: 오른쪽 위
+            {{-0.5f,  0.5f, 0.0f}, {0.0f, 1.0f}}  // 3: 왼쪽 위
     };
 
-    mMesh = std::make_unique<VulkanMesh>(mContext.get(), vertices);
+    std::vector<uint32_t> indices = {
+            0, 1, 2,
+            2, 3, 0
+    };
+
+    mMesh = std::make_unique<VulkanMesh>(mContext.get(), vertices, indices);
 }
 
 void Renderer::render() {
