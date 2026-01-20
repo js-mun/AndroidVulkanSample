@@ -1,8 +1,8 @@
 #pragma once
 
 #include "volk.h"
-#include "vulkan_context.h"
-#include "vulkan_buffer.h"
+#include "VulkanContext.h"
+#include "VulkanBuffer.h"
 #include "vulkan_types.h"
 #include <vector>
 #include <memory>

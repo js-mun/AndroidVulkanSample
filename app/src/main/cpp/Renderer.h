@@ -6,15 +6,15 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "camera.h"
-#include "vulkan_buffer.h"
-#include "vulkan_command.h"
-#include "vulkan_context.h"
-#include "vulkan_descriptor.h"
-#include "vulkan_mesh.h"
-#include "vulkan_pipeline.h"
-#include "vulkan_swapchain.h"
-#include "vulkan_sync.h"
+#include "Camera.h"
+#include "VulkanBuffer.h"
+#include "VulkanCommand.h"
+#include "VulkanContext.h"
+#include "VulkanDescriptor.h"
+#include "VulkanMesh.h"
+#include "VulkanPipeline.h"
+#include "VulkanSwapchain.h"
+#include "VulkanSync.h"
 
 class Renderer {
 public:

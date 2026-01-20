@@ -1,4 +1,4 @@
-#include "vulkan_context.h"
+#include "VulkanContext.h"
 #include "Log.h"
 
 VulkanContext::VulkanContext(struct android_app* app) : mApp(app) {

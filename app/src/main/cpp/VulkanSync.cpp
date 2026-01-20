@@ -1,4 +1,4 @@
-#include "vulkan_sync.h"
+#include "VulkanSync.h"
 #include "Log.h"
 
 VulkanSync::VulkanSync(VkDevice device, uint32_t maxFramesInFlight)

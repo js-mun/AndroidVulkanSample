@@ -1,4 +1,4 @@
-#include "vulkan_mesh.h"
+#include "VulkanMesh.h"
 
 VulkanMesh::VulkanMesh(VulkanContext* context, const std::vector<Vertex>& vertices) {
     // 스테이징 버퍼(CPU용) 생성 없이 간단히 직접 생성 (학습용)

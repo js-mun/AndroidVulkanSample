@@ -18,15 +18,15 @@ add_library(mygame SHARED
         main.cpp
         Renderer.cpp
         asset_utils.cpp
-        vulkan_buffer.cpp
-        vulkan_context.cpp
-        vulkan_pipeline.cpp
-        vulkan_swapchain.cpp
-        vulkan_sync.cpp
-        vulkan_command.cpp
-        vulkan_descriptor.cpp
-        vulkan_mesh.cpp
-        camera.cpp
+        VulkanBuffer.cpp
+        VulkanContext.cpp
+        VulkanPipeline.cpp
+        VulkanSwapchain.cpp
+        VulkanSync.cpp
+        VulkanCommand.cpp
+        VulkanDescriptor.cpp
+        VulkanMesh.cpp
+        Camera.cpp
 )
 
 add_library(volk STATIC third_party/volk/volk.c)

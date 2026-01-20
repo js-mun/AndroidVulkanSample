@@ -1,4 +1,4 @@
-#include "vulkan_command.h"
+#include "VulkanCommand.h"
 #include "Log.h"
 
 VulkanCommand::VulkanCommand(VkDevice device, uint32_t queueFamilyIndex)

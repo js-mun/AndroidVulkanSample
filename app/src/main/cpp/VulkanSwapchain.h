@@ -2,11 +2,11 @@
 // Created by mj on 1/11/26.
 //
 
-#ifndef MYGAME_VULKAN_SWAPCHAIN_H
-#define MYGAME_VULKAN_SWAPCHAIN_H
+#ifndef MYGAME_VULKANSWAPCHAIN_H
+#define MYGAME_VULKANSWAPCHAIN_H
 
 #include "volk.h"
-#include "vulkan_context.h"
+#include "VulkanContext.h"
 #include <vector>
 
 class VulkanSwapchain {
@@ -49,4 +49,4 @@ private:
     bool createImageViews();
 };
 
-#endif //MYGAME_VULKAN_SWAPCHAIN_H
+#endif //MYGAME_VULKANSWAPCHAIN_H

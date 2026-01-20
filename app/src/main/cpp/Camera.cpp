@@ -1,4 +1,4 @@
-#include "camera.h"
+#include "Camera.h"
 #include <algorithm>
 
 Camera::Camera() : mMVPMatrix(1.0f) {
@@ -32,7 +32,7 @@ glm::mat4 Camera::calculateRotation(VkSurfaceTransformFlagBitsKHR transform) {
     } else if (transform == VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
         rotation = glm::rotate(rotation, glm::radians(-270.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     }
-    
+
     return rotation;
 }
 
