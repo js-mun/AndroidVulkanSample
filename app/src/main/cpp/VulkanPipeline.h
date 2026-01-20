@@ -16,7 +16,7 @@ public:
     VulkanPipeline(const VulkanPipeline&) = delete;
     VulkanPipeline& operator=(const VulkanPipeline&) = delete;
 
-    bool initialize(VkFormat swapchainImageFormat, AAssetManager* assetManager);
+    bool initialize(VkFormat swapchainImageFormat, VkFormat depthFormat, AAssetManager* assetManager);
 
     VkRenderPass getRenderPass() const { return mRenderPass; }
     VkPipelineLayout getPipelineLayout() const { return mPipelineLayout; }
@@ -31,7 +31,7 @@ private:
     VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
     VkPipeline mGraphicsPipeline = VK_NULL_HANDLE;
 
-    bool createRenderPass(VkFormat imageFormat);
+    bool createRenderPass(VkFormat imageFormat, VkFormat depthFormat);
     bool createDescriptorSetLayout();
     bool createGraphicsPipeline(AAssetManager* assetManager);
 };

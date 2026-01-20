@@ -3,6 +3,7 @@
 #include "asset_utils.h"
 #include "vulkan_types.h"
 
+#include <array>
 #include <vector>
 #include <chrono>
 
@@ -29,7 +30,7 @@ bool Renderer::initialize() {
     }
 
     mPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
-    if (!mPipeline->initialize(mSwapchain->getImageFormat(), mApp->activity->assetManager)) {
+    if (!mPipeline->initialize(mSwapchain->getImageFormat(), mSwapchain->getDepthFormat(), mApp->activity->assetManager)) {
         LOGE("Failed to initialize Vulkan Pipeline");
         return false;
     }
@@ -92,9 +93,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = mSwapchain->getExtent();
 
-    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.pClearValues = &clearColor;
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}}; // 검은색으로 클리어
+    clearValues[1].depthStencil = {1.0f, 0};                     // 가장 먼 깊이(1.0)로 클리어
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getGraphicsPipeline());
