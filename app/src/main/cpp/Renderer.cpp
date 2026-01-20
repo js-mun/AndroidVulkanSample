@@ -94,7 +94,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     renderPassInfo.renderArea.extent = mSwapchain->getExtent();
 
     std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}}; // 검은색으로 클리어
+    clearValues[0].color = {{0.2f, 0.2f, 0.2f, 1.0f}}; // 어두운 회색 클리어
     clearValues[1].depthStencil = {1.0f, 0};                     // 가장 먼 깊이(1.0)로 클리어
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
@@ -121,26 +121,24 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     scissor.extent = mSwapchain->getExtent();
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    // 삼각형 그리기 (정점 3개)
     mMesh->draw(commandBuffer);
 
     vkCmdEndRenderPass(commandBuffer);
 }
 
 void Renderer::createVertexBuffer() {
-    // 큐브의 8개 꼭짓점 (x, y, z)
     std::vector<Vertex> vertices = {
-            {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f}}, // 0: 앞-왼쪽-아래
-            {{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f}}, // 1: 앞-오른쪽-아래
-            {{ 0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}}, // 2: 앞-오른쪽-위
-            {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f}}, // 3: 앞-왼쪽-위
-            {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}}, // 4: 뒤-왼쪽-아래
-            {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}}, // 5: 뒤-오른쪽-아래
-            {{ 0.5f,  0.5f, -0.5f}, {1.0f, 1.0f}}, // 6: 뒤-오른쪽-위
-            {{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f}}  // 7: 뒤-왼쪽-위
+            // 위치 (x, y, z), 색상 (r, g, b), UV (u, v)
+            {{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // 0: 빨강
+            {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}}, // 1: 초록
+            {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // 2: 파랑
+            {{-0.5f,  0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}, // 3: 하양
+            {{-0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // 4: 노랑
+            {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.0f}}, // 5: 청록
+            {{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // 6: 보라
+            {{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f}}  // 7: 검정
     };
 
-    // 큐브의 6개 면을 구성하는 인덱스 (총 12개 삼각형)
     std::vector<uint32_t> indices = {
             0, 1, 2, 2, 3, 0, // 앞
             1, 5, 6, 6, 2, 1, // 오른쪽
