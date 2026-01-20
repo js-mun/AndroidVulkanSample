@@ -5,21 +5,25 @@ Camera::Camera() : mMVPMatrix(1.0f) {
 }
 
 void Camera::update(float width, float height, VkSurfaceTransformFlagBitsKHR transform) {
-    // 1. 기본 모델 행렬 (여기서는 고정)
-    glm::mat4 model = glm::mat4(1.0f);
+    // 1. 모델 행렬 (큐브를 약간 돌려놓음)
+    glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(45.0f), glm::vec3(1.0f, 1.0f, 0.0f));
 
-    // 2. 종횡비 및 투영 보정 행렬 계산
-    glm::mat4 projection = calculateProjection(width, height);
+    // 2. 뷰 행렬 (카메라를 뒤로 2만큼 뺌)
+    glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 6.0f), // 이 값을 키울수록 뒤로 갑니다.
+                                 glm::vec3(0.0f, 0.0f, 0.0f),
+                                 glm::vec3(0.0f, 1.0f, 0.0f));
+    // 3. 투영 행렬 (원근법 적용)
+    float aspect = width / height;
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
 
-    // 3. 기기 회전 보정 행렬 계산
+    // Vulkan은 Y축이 아래로 향하므로 보정 (음수 Viewport 사용 중이라면 불필요)
+    // proj[1][1] *= -1;
+
+    // 4. 기기 회전 보정
     glm::mat4 rotation = calculateRotation(transform);
 
-
-    // 4. 최종 결합 (오른쪽부터 적용: Model -> Projection -> Rotation)
-    mMVPMatrix = rotation * projection * model;
-    
-    // 전체 크기 조정
-    mMVPMatrix = glm::scale(mMVPMatrix, glm::vec3(1.0f, 1.0f, 1.0f));
+    // 최종 조합: Rotation * Projection * View * Model
+    mMVPMatrix = rotation * proj * view * model;
 }
 
 glm::mat4 Camera::calculateRotation(VkSurfaceTransformFlagBitsKHR transform) {
