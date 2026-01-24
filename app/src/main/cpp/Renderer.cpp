@@ -229,12 +229,20 @@ void Renderer::render() {
 }
 
 void Renderer::updateUniformBuffer(uint32_t currentImage) {
-    mCamera->update(mSwapchain->getExtent().width,
-                    mSwapchain->getExtent().height,
-                    mSwapchain->getTransform());
+    // 1. 카메라 업데이트 (여기서 카메라의 위치가 회전하며 VP 행렬이 계산됨)
+    mCamera->update(
+            static_cast<float>(mSwapchain->getExtent().width),
+            static_cast<float>(mSwapchain->getExtent().height),
+            mSwapchain->getTransform()
+    );
 
+    // 2. 모델 행렬 (현재 큐브는 원점에 정지해 있음)
+    glm::mat4 model = glm::mat4(1.0f);
+
+    // 3. 최종 MVP 결합 (VP * Model)
     UniformBufferObject ubo{};
-    ubo.mvp = mCamera->getMVPMatrix();
-    // GPU 메모리로 복사
+    ubo.mvp = mCamera->getViewProjectionMatrix() * model;
+
+    // 4. GPU 전송
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
 }

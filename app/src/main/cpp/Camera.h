@@ -11,16 +11,14 @@ public:
     Camera();
     ~Camera() = default;
 
-    // 화면 해상도와 Vulkan의 회전 상태를 업데이트
     void update(float width, float height, VkSurfaceTransformFlagBitsKHR transform);
-    
-    // 최종 MVP 행렬 반환
-    glm::mat4 getMVPMatrix() const { return mMVPMatrix; }
+
+    // 최종 View-Projection 조합 행렬 반환 (Model 제외)
+    glm::mat4 getViewProjectionMatrix() const { return mVPMatrix; }
 
 private:
-    glm::mat4 mMVPMatrix;
-    
+    glm::mat4 mVPMatrix;
+
     // 내부 보정 로직
     glm::mat4 calculateRotation(VkSurfaceTransformFlagBitsKHR transform);
-    glm::mat4 calculateProjection(float width, float height);
 };
