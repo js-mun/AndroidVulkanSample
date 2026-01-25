@@ -71,7 +71,11 @@ bool Renderer::initialize() {
 
     mCamera = std::make_unique<Camera>();
 
-    createVertexBuffer();
+    mModel = std::make_unique<VulkanModel>(mContext.get());
+    if (!mModel->loadFromFile(mApp->activity->assetManager, "glTF/AnimatedCube/AnimatedCube.gltf")) {
+        LOGE("Failed to load glTF model!");
+        return false;
+    }
 
     LOGI("Vulkan Initialization Wrap-up Successful!");
 
@@ -121,34 +125,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
     scissor.extent = mSwapchain->getExtent();
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    mMesh->draw(commandBuffer);
+    if (mModel) {
+        mModel->draw(commandBuffer);
+    }
 
     vkCmdEndRenderPass(commandBuffer);
-}
-
-void Renderer::createVertexBuffer() {
-    std::vector<Vertex> vertices = {
-            // 위치 (x, y, z), 색상 (r, g, b), UV (u, v)
-            {{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // 0: 빨강
-            {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}}, // 1: 초록
-            {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // 2: 파랑
-            {{-0.5f,  0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}, // 3: 하양
-            {{-0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // 4: 노랑
-            {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.0f}}, // 5: 청록
-            {{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // 6: 보라
-            {{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f}}  // 7: 검정
-    };
-
-    std::vector<uint32_t> indices = {
-            0, 1, 2, 2, 3, 0, // 앞
-            1, 5, 6, 6, 2, 1, // 오른쪽
-            5, 4, 7, 7, 6, 5, // 뒤
-            4, 0, 3, 3, 7, 4, // 왼쪽
-            3, 2, 6, 6, 7, 3, // 위
-            4, 5, 1, 1, 0, 4  // 아래
-    };
-
-    mMesh = std::make_unique<VulkanMesh>(mContext.get(), vertices, indices);
 }
 
 void Renderer::render() {
@@ -241,7 +222,8 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
 
     // 3. 최종 MVP 결합 (VP * Model)
     UniformBufferObject ubo{};
-    ubo.mvp = mCamera->getViewProjectionMatrix() * model;
+    glm::mat4 vp = mCamera->getViewProjectionMatrix();
+    ubo.mvp = vp * model;
 
     // 4. GPU 전송
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));

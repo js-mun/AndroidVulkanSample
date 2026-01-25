@@ -7,7 +7,7 @@ Camera::Camera() : mVPMatrix(1.0f) {
 void Camera::update(float width, float height, VkSurfaceTransformFlagBitsKHR transform) {
     // 1. 카메라 위치 고정
     float camX = 0.0f;
-    float camZ = 6.0f; // 큐브로부터 6만큼 떨어진 정면
+    float camZ = 10.0f; // 큐브로부터 X만큼 떨어진 정면
 
     // 2. 뷰 행렬: 회전하는 카메라 위치 적용
     glm::mat4 view = glm::lookAt(glm::vec3(camX, 2.0f, camZ), // 위아래로 2.0만큼 띄움

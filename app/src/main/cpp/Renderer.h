@@ -12,6 +12,7 @@
 #include "VulkanContext.h"
 #include "VulkanDescriptor.h"
 #include "VulkanMesh.h"
+#include "VulkanModel.h"
 #include "VulkanPipeline.h"
 #include "VulkanSwapchain.h"
 #include "VulkanSync.h"
@@ -35,7 +36,7 @@ private:
     std::unique_ptr<VulkanCommand> mCommand;
     std::unique_ptr<VulkanDescriptor> mDescriptor;
 
-    std::unique_ptr<VulkanMesh> mMesh;
+    std::unique_ptr<VulkanModel> mModel;
 
     std::unique_ptr<Camera> mCamera;
 
@@ -48,5 +49,4 @@ private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
     void updateUniformBuffer(uint32_t currentImage);
-    void createVertexBuffer();
 };
