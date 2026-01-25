@@ -36,6 +36,11 @@ target_compile_definitions(volk PUBLIC
         VK_NO_PROTOTYPES            # Vulkan 함수를 직접(정적) 호출하지 않고, volk를 통해 동적 로드
 )
 
+target_include_directories(mygame PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tinygltf)
+target_compile_definitions(mygame PRIVATE
+        TINYGLTF_ANDROID_LOAD_FROM_ASSETS # 안드로이드 에셋 로딩 활성화
+)
+
 # Dependencies
 find_package(game-activity REQUIRED CONFIG)
 
