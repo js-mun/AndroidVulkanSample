@@ -27,6 +27,7 @@ add_library(mygame SHARED
         VulkanDescriptor.cpp
         VulkanMesh.cpp
         VulkanModel.cpp
+        VulkanTexture.cpp
         Camera.cpp
 )
 

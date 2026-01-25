@@ -22,10 +22,19 @@ public:
     VkQueue getGraphicsQueue() const { return mGraphicsQueue; }
     uint32_t getGraphicsQueueFamilyIndex() const { return mGraphicsQueueFamilyIndex; }
 
-    // copy utils
+    // Utilities
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+    
+    // Buffer Utils
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+    
+    // Image Utils (추가됨)
+    void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
+                     VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
+                     VkImage& image, VkDeviceMemory& imageMemory);
+    void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
+    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
 private:
     struct android_app* mApp;
@@ -37,13 +46,14 @@ private:
     VkQueue mGraphicsQueue = VK_NULL_HANDLE;
     uint32_t mGraphicsQueueFamilyIndex = 0;
 
-    VkCommandPool mTransferCommandPool = VK_NULL_HANDLE; // copy utils
+    VkCommandPool mTransferCommandPool = VK_NULL_HANDLE;
 
     bool createInstance();
     bool createSurface();
     bool selectPhysicalDevice();
     bool createLogicalDevice();
-
-    bool createTransferCommandPool(); // copy utils
+    bool createTransferCommandPool();
+    
+    // Memory helper
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 };
-

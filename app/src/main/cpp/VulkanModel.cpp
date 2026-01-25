@@ -33,10 +33,23 @@ bool VulkanModel::loadFromFile(AAssetManager* assetManager, const std::string& f
         LOGE("Failed to parse glTF: %s", filename.c_str());
         return false;
     }
-
     LOGI("Successfully loaded glTF model: %s", filename.c_str());
+
+    loadTextures(model);
     processModel(model);
+
     return true;
+}
+
+void VulkanModel::loadTextures(const tinygltf::Model& model) {
+    for (const auto& image : model.images) {
+        auto texture = std::make_unique<VulkanTexture>(mContext);
+        // tinygltf는 이미지를 로드하여 image.image(vector<unsigned char>)에 담아둡니다.
+        if (texture->loadFromMemory(image.image.data(), image.width, image.height, VK_FORMAT_R8G8B8A8_SRGB)) {
+            mTextures.push_back(std::move(texture));
+            LOGI("Loaded glTF texture: %s (%dx%d)", image.name.c_str(), image.width, image.height);
+        }
+    }
 }
 
 void VulkanModel::processModel(const tinygltf::Model& model) {
