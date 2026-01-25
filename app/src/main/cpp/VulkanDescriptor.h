@@ -2,6 +2,7 @@
 
 #include "volk.h"
 #include "VulkanBuffer.h"
+#include "VulkanTexture.h"
 #include <vector>
 #include <memory>
 
@@ -14,7 +15,9 @@ public:
     VulkanDescriptor(const VulkanDescriptor&) = delete;
     VulkanDescriptor& operator=(const VulkanDescriptor&) = delete;
 
-    bool initialize(VkDescriptorSetLayout layout, const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers);
+    bool initialize(VkDescriptorSetLayout layout,
+                    const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
+                    const std::vector<std::unique_ptr<VulkanTexture>>& textures);
 
     VkDescriptorSet getSet(uint32_t index) const { return mDescriptorSets[index]; }
 
@@ -25,7 +28,8 @@ private:
     VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> mDescriptorSets;
 
-    bool createDescriptorPool();
+    bool createDescriptorPool(uint32_t textureCount);
     bool allocateDescriptorSets(VkDescriptorSetLayout layout);
-    void updateDescriptorSets(const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers);
+    void updateDescriptorSets(const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
+                              const std::vector<std::unique_ptr<VulkanTexture>>& textures);
 };

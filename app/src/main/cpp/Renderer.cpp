@@ -29,6 +29,7 @@ bool Renderer::initialize() {
         return false;
     }
 
+    // 텍스처를 위해 DescriptorSetLayout을 생성할 때 Sampler 바인딩이 포함됨
     mPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
     if (!mPipeline->initialize(mSwapchain->getImageFormat(), mSwapchain->getDepthFormat(), mApp->activity->assetManager)) {
         LOGE("Failed to initialize Vulkan Pipeline");
@@ -63,19 +64,21 @@ bool Renderer::initialize() {
         mUniformBuffers[i]->map();
     }
 
-    mDescriptor = std::make_unique<VulkanDescriptor>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
-    if (!mDescriptor->initialize(mPipeline->getDescriptorSetLayout(), mUniformBuffers)) {
-        LOGE("Failed to initialize VulkanDescriptor");
-        return false;
-    }
-
-    mCamera = std::make_unique<Camera>();
-
+    // 모델을 먼저 로드하여 텍스처를 확보한 뒤 디스크립터를 초기화합니다.
     mModel = std::make_unique<VulkanModel>(mContext.get());
     if (!mModel->loadFromFile(mApp->activity->assetManager, "glTF/AnimatedCube/AnimatedCube.gltf")) {
         LOGE("Failed to load glTF model!");
         return false;
     }
+
+    // 모델의 텍스처 리스트를 전달합니다.
+    mDescriptor = std::make_unique<VulkanDescriptor>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
+    if (!mDescriptor->initialize(mPipeline->getDescriptorSetLayout(), mUniformBuffers, mModel->getTextures())) {
+        LOGE("Failed to initialize VulkanDescriptor");
+        return false;
+    }
+
+    mCamera = std::make_unique<Camera>();
 
     LOGI("Vulkan Initialization Wrap-up Successful!");
 
@@ -184,7 +187,7 @@ void Renderer::render() {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(mContext->getGraphicsQueue(), 1, &submitInfo, mSync->getInFlightFence(mCurrentFrame)) != VK_SUCCESS) {
+    if (vkQueueSubmit(mContext->getGraphicsQueue(), 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
         LOGE("Failed to submit draw command buffer");
     }
 

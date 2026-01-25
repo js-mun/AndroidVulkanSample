@@ -59,7 +59,7 @@ bool VulkanPipeline::createRenderPass(VkFormat imageFormat, VkFormat depthFormat
 
     VkAttachmentReference colorAttachmentRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
-    // 2. Depth Attachment (추가)
+    // 2. Depth Attachment
     VkAttachmentDescription depthAttachment = {};
     depthAttachment.format = depthFormat;
     depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -103,16 +103,23 @@ bool VulkanPipeline::createRenderPass(VkFormat imageFormat, VkFormat depthFormat
 }
 
 bool VulkanPipeline::createDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    uboLayoutBinding.pImmutableSamplers = nullptr;
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+    // Binding 0: Uniform Buffer (Vertex Shader)
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[0].pImmutableSamplers = nullptr;
+    // Binding 1: Combined Image Sampler (Fragment Shader)
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[1].pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &uboLayoutBinding;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
 
     if (vkCreateDescriptorSetLayout(mDevice, &layoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS) {
         LOGE("Failed to create Descriptor Set Layout");
