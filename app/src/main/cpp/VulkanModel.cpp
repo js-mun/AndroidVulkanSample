@@ -60,7 +60,22 @@ void VulkanModel::processModel(const tinygltf::Model& model) {
                 vertices[i].texCoord = glm::vec2(0.0f, 0.0f);       // UV 초기화
             }
 
-            // 2. INDICES 추출 (uint8, uint16, uint32 대응)
+            // 1.1 COLOR_0 추출 (존재하는 경우에만)
+            if (primitive.attributes.find("COLOR_0") != primitive.attributes.end()) {
+                const tinygltf::Accessor& colorAccessor = model.accessors[primitive.attributes.at("COLOR_0")];
+                const tinygltf::BufferView& colorView = model.bufferViews[colorAccessor.bufferView];
+                const tinygltf::Buffer& colorBuffer = model.buffers[colorView.buffer];
+                const unsigned char* colorData = &colorBuffer.data[colorView.byteOffset + colorAccessor.byteOffset];
+                int stride = colorAccessor.ByteStride(colorView);
+                for (size_t i = 0; i < colorAccessor.count; i++) {
+                    const float* rgba = reinterpret_cast<const float*>(colorData + i * stride);
+                    // glTF는 VEC3 또는 VEC4 색상을 가질 수 있습니다.
+                    vertices[i].color = glm::vec3(rgba[0], rgba[1], rgba[2]);
+                }
+                LOGI("Extracted COLOR_0 data for %zu vertices", colorAccessor.count);
+            }
+
+            // 2. INDICES 추출
             if (primitive.indices >= 0) {
                 const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
                 const tinygltf::BufferView& indexView = model.bufferViews[indexAccessor.bufferView];
