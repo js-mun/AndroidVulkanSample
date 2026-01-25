@@ -75,6 +75,20 @@ void VulkanModel::processModel(const tinygltf::Model& model) {
                 LOGI("Extracted COLOR_0 data for %zu vertices", colorAccessor.count);
             }
 
+            // 1.2 TEXCOORD_0 추출 (추가됨)
+            if (primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end()) {
+                const tinygltf::Accessor& uvAccessor = model.accessors[primitive.attributes.at("TEXCOORD_0")];
+                const tinygltf::BufferView& uvView = model.bufferViews[uvAccessor.bufferView];
+                const tinygltf::Buffer& uvBuffer = model.buffers[uvView.buffer];
+                const unsigned char* uvData = &uvBuffer.data[uvView.byteOffset + uvAccessor.byteOffset];
+                int stride = uvAccessor.ByteStride(uvView);
+                for (size_t i = 0; i < uvAccessor.count; i++) {
+                    const float* uvs = reinterpret_cast<const float*>(uvData + i * stride);
+                    vertices[i].texCoord = glm::vec2(uvs[0], uvs[1]);
+                }
+                LOGI("Extracted TEXCOORD_0 data for %zu vertices", uvAccessor.count);
+            }
+
             // 2. INDICES 추출
             if (primitive.indices >= 0) {
                 const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
@@ -101,12 +115,12 @@ void VulkanModel::processModel(const tinygltf::Model& model) {
             // Debugging: 처음 10개의 정점 데이터 출력
             LOGV("Mesh Primitive: Vertex Count = %zu, Index Count = %zu", vertices.size(), indices.size());
             for (size_t i = 0; i < std::min(vertices.size(), size_t(10)); ++i) {
-                LOGV("  Vertex[%zu]: pos(%.2f, %.2f, %.2f), color(%.2f, %.2f, %.2f)",
+                LOGV("  Vertex[%zu]: pos(%.2f, %.2f, %.2f), color(%.2f, %.2f, %.2f), uv(%.2f, %.2f)",
                      i,
                      vertices[i].pos.x, vertices[i].pos.y, vertices[i].pos.z,
-                     vertices[i].color.r, vertices[i].color.g, vertices[i].color.b);
+                     vertices[i].color.r, vertices[i].color.g, vertices[i].color.b,
+                     vertices[i].texCoord.x, vertices[i].texCoord.y);
             }
-
         }
     }
 }
