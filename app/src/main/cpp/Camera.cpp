@@ -9,7 +9,7 @@ void Camera::update(float width, float height, VkSurfaceTransformFlagBitsKHR tra
     float camX = 0.0f;
     float camZ = 10.0f; // 큐브로부터 X만큼 떨어진 정면
 
-    // 2. 뷰 행렬: 회전하는 카메라 위치 적용
+    // 2. 뷰 행렬
     glm::mat4 view = glm::lookAt(glm::vec3(camX, 2.0f, camZ), // 위아래로 2.0만큼 띄움
                                  glm::vec3(0.0f, 0.0f, 0.0f), // 원점을 바라봄
                                  glm::vec3(0.0f, 1.0f, 0.0f));

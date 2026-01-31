@@ -213,21 +213,23 @@ void Renderer::render() {
 }
 
 void Renderer::updateUniformBuffer(uint32_t currentImage) {
-    // 1. 카메라 업데이트 (여기서 카메라의 위치가 회전하며 VP 행렬이 계산됨)
-    mCamera->update(
-            static_cast<float>(mSwapchain->getExtent().width),
-            static_cast<float>(mSwapchain->getExtent().height),
-            mSwapchain->getTransform()
-    );
+    // 1. 앱 시작 후 경과 시간 계산
+    static auto startTime = std::chrono::steady_clock::now();
+    auto currentTime = std::chrono::steady_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-    // 2. 모델 행렬 (현재 큐브는 원점에 정지해 있음)
-    glm::mat4 model = glm::mat4(1.0f);
+    // 2. 카메라 업데이트 (VP 행렬 계산)
+    mCamera->update(static_cast<float>(mSwapchain->getExtent().width),
+                    static_cast<float>(mSwapchain->getExtent().height),
+                    mSwapchain->getTransform());
 
-    // 3. 최종 MVP 결합 (VP * Model)
+    // 3. [핵심] 모델에게 현재 시간에 맞는 변환 행렬을 가져옴
+    glm::mat4 modelMatrix = mModel->getAnimationTransform(time);
+
+    // 4. 최종 MVP 조합 (VP * M)
     UniformBufferObject ubo{};
-    glm::mat4 vp = mCamera->getViewProjectionMatrix();
-    ubo.mvp = vp * model;
+    ubo.mvp = mCamera->getViewProjectionMatrix() * modelMatrix;
 
-    // 4. GPU 전송
+    // 5. GPU 전송
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
 }

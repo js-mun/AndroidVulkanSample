@@ -13,6 +13,61 @@
 VulkanModel::VulkanModel(VulkanContext* context) : mContext(context) {
 }
 
+glm::mat4 VulkanModel::getAnimationTransform(float time) {
+    if (mRotationAnim.times.empty()) return glm::mat4(1.0f);
+
+    // 1. 전체 애니메이션 시간을 넘어가면 반복(Loop) 처리
+    float animTime = fmod(time, mRotationAnim.times.back());
+
+    // 2. 현재 시간에 해당하는 키프레임 구간 찾기
+    size_t i = 0;
+    while (i < mRotationAnim.times.size() - 1 && animTime > mRotationAnim.times[i + 1]) {
+        i++;
+    }
+
+    // 3. 두 키프레임 사이의 보간 비율(0.0 ~ 1.0) 계산
+    float t1 = mRotationAnim.times[i];
+    float t2 = mRotationAnim.times[i + 1];
+    float alpha = (animTime - t1) / (t2 - t1);
+
+    // 4. 회전 보간 (Spherical Linear Interpolation - SLERP)
+    glm::quat q1 = mRotationAnim.rotations[i];
+    glm::quat q2 = mRotationAnim.rotations[i + 1];
+    glm::quat blendedQuat = glm::slerp(q1, q2, alpha);
+
+    // 5. 최종 회전 행렬로 변환하여 반환
+    return glm::mat4_cast(blendedQuat);
+}
+
+void VulkanModel::loadAnimations(const tinygltf::Model& model) {
+    if (model.animations.empty()) return;
+
+    // AnimatedCube는 첫 번째 애니메이션의 첫 번째 채널이 회전입니다.
+    const auto& anim = model.animations[0];
+    for (const auto& channel : anim.channels) {
+        if (channel.target_path == "rotation") {
+            const auto& sampler = anim.samplers[channel.sampler];
+
+            // 1. 시간 데이터 추출
+            const auto& inputAccessor = model.accessors[sampler.input];
+            const auto& inputView = model.bufferViews[inputAccessor.bufferView];
+            const auto& inputBuffer = model.buffers[inputView.buffer];
+            const float* times = reinterpret_cast<const float*>(&inputBuffer.data[inputView.byteOffset + inputAccessor.byteOffset]);
+            mRotationAnim.times.assign(times, times + inputAccessor.count);
+
+            // 2. 회전 데이터(Quaternion) 추출
+            const auto& outputAccessor = model.accessors[sampler.output];
+            const auto& outputView = model.bufferViews[outputAccessor.bufferView];
+            const auto& outputBuffer = model.buffers[outputView.buffer];
+            const float* rotations = reinterpret_cast<const float*>(&outputBuffer.data[outputView.byteOffset + outputAccessor.byteOffset]);
+
+            for (size_t i = 0; i < outputAccessor.count; ++i) {
+                mRotationAnim.rotations.push_back(glm::make_quat(&rotations[i * 4]));
+            }
+        }
+    }
+}
+
 bool VulkanModel::loadFromFile(AAssetManager* assetManager, const std::string& filename) {
     // 1. tinygltf 전역 에셋 매니저 설정 (내부 로더가 사용)
     tinygltf::asset_manager = assetManager;
@@ -37,6 +92,7 @@ bool VulkanModel::loadFromFile(AAssetManager* assetManager, const std::string& f
 
     loadTextures(model);
     processModel(model);
+    loadAnimations(model);
 
     return true;
 }
