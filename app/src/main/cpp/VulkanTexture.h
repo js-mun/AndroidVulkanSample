@@ -18,7 +18,7 @@ private:
     VulkanContext* mContext;
     
     VkImage mTextureImage = VK_NULL_HANDLE;
-    VkDeviceMemory mTextureImageMemory = VK_NULL_HANDLE;
+    VmaAllocation mTextureAllocation = VK_NULL_HANDLE;
     VkImageView mTextureImageView = VK_NULL_HANDLE;
     VkSampler mTextureSampler = VK_NULL_HANDLE;
 

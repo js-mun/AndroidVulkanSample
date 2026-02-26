@@ -1,3 +1,8 @@
+// VMA_IMPLEMENTATION는 vma header를 사용하는
+// 단 하나의 cpp에서 define해야 함 (vma는 header only로 구현)
+// 헤더에 추가하면, 그 헤더를 include하는 모든 파일에서 중복 생성되어 심볼 중복 발생
+#define VMA_IMPLEMENTATION
+
 #include "VulkanContext.h"
 #include "Log.h"
 
@@ -5,6 +10,9 @@ VulkanContext::VulkanContext(struct android_app* app) : mApp(app) {
 }
 
 VulkanContext::~VulkanContext() {
+    if (mAllocator != VK_NULL_HANDLE) {
+        vmaDestroyAllocator(mAllocator);
+    }
     if (mTransferCommandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(mDevice, mTransferCommandPool, nullptr);
     }
@@ -25,6 +33,46 @@ bool VulkanContext::initialize() {
     if (!selectPhysicalDevice()) return false;
     if (!createLogicalDevice()) return false;
     if (!createTransferCommandPool()) return false;
+    if (!createAllocator()) return false;
+
+    return true;
+}
+
+bool VulkanContext::createAllocator() {
+    VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_1;
+    allocatorInfo.physicalDevice = mPhysicalDevice;
+    allocatorInfo.device = mDevice;
+    allocatorInfo.instance = mInstance;
+
+    // VMA가 Volk를 통해 로드된 함수 포인터들을 사용하도록 명시적으로 설정
+    VmaVulkanFunctions vulkanFunctions = {};
+    vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+    vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
+    vulkanFunctions.vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties;
+    vulkanFunctions.vkAllocateMemory = vkAllocateMemory;
+    vulkanFunctions.vkFreeMemory = vkFreeMemory;
+    vulkanFunctions.vkMapMemory = vkMapMemory;
+    vulkanFunctions.vkUnmapMemory = vkUnmapMemory;
+    vulkanFunctions.vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges;
+    vulkanFunctions.vkInvalidateMappedMemoryRanges = vkInvalidateMappedMemoryRanges;
+    vulkanFunctions.vkBindBufferMemory = vkBindBufferMemory;
+    vulkanFunctions.vkBindImageMemory = vkBindImageMemory;
+    vulkanFunctions.vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements;
+    vulkanFunctions.vkGetImageMemoryRequirements = vkGetImageMemoryRequirements;
+    vulkanFunctions.vkCreateBuffer = vkCreateBuffer;
+    vulkanFunctions.vkDestroyBuffer = vkDestroyBuffer;
+    vulkanFunctions.vkCreateImage = vkCreateImage;
+    vulkanFunctions.vkDestroyImage = vkDestroyImage;
+    vulkanFunctions.vkCmdCopyBuffer = vkCmdCopyBuffer;
+
+    allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+
+    if (vmaCreateAllocator(&allocatorInfo, &mAllocator) != VK_SUCCESS) {
+        LOGE("Failed to create VMA Allocator");
+        return false;
+    }
     return true;
 }
 
@@ -112,11 +160,11 @@ bool VulkanContext::selectPhysicalDevice() {
     for (uint32_t i = 0; i < queueFamilyCount; i++) {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             mGraphicsQueueFamilyIndex = i;
-            return true;
+            break;
         }
     }
 
-    return false;
+    return true;
 }
 
 bool VulkanContext::createLogicalDevice() {
@@ -193,8 +241,8 @@ void VulkanContext::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceS
 }
 
 void VulkanContext::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
-                                VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
-                                VkImage& image, VkDeviceMemory& imageMemory) {
+                 VkImageUsageFlags usage, VmaMemoryUsage vmaUsage,
+                 VkImage& image, VmaAllocation& allocation) {
     VkImageCreateInfo imageInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.extent.width = width;
@@ -209,24 +257,15 @@ void VulkanContext::createImage(uint32_t width, uint32_t height, VkFormat format
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateImage(mDevice, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-        LOGE("Failed to create image");
+    VmaAllocationCreateInfo allocInfo = {};
+    allocInfo.usage = vmaUsage;
+    allocInfo.flags = 0;
+
+    // 기존 vkCreateImage, findMemoryType, vkAllocateMemory, vkBindImageMemory를 이 하나로 대체
+    if (vmaCreateImage(mAllocator, &imageInfo, &allocInfo, &image, &allocation, nullptr) != VK_SUCCESS) {
+        LOGE("Failed to create VMA image");
         return;
     }
-
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(mDevice, image, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-    if (vkAllocateMemory(mDevice, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-        LOGE("Failed to allocate image memory");
-        return;
-    }
-
-    vkBindImageMemory(mDevice, image, imageMemory, 0);
 }
 
 void VulkanContext::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
@@ -284,15 +323,4 @@ void VulkanContext::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t w
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
     endSingleTimeCommands(commandBuffer);
-}
-
-uint32_t VulkanContext::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(mPhysicalDevice, &memProperties);
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-            return i;
-        }
-    }
-    return 0;
 }

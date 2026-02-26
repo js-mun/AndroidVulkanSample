@@ -48,7 +48,7 @@ private:
 
     // 깊이 버퍼 관련 변수
     VkImage mDepthImage = VK_NULL_HANDLE;
-    VkDeviceMemory mDepthImageMemory = VK_NULL_HANDLE;
+    VmaAllocation mDepthImageAllocation = VK_NULL_HANDLE;
     VkImageView mDepthImageView = VK_NULL_HANDLE;
     VkFormat mDepthFormat;
 

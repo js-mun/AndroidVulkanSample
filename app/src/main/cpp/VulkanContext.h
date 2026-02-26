@@ -1,6 +1,8 @@
 #pragma once
 
 #include "volk.h"
+#include "vk_mem_alloc.h"
+
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <vector>
 
@@ -22,6 +24,9 @@ public:
     VkQueue getGraphicsQueue() const { return mGraphicsQueue; }
     uint32_t getGraphicsQueueFamilyIndex() const { return mGraphicsQueueFamilyIndex; }
 
+    // VMA
+    VmaAllocator getAllocator() const { return mAllocator; }
+
     // Utilities
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer);
@@ -29,10 +34,10 @@ public:
     // Buffer Utils
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     
-    // Image Utils (추가됨)
+    // Image Utils
     void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
-                     VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
-                     VkImage& image, VkDeviceMemory& imageMemory);
+                     VkImageUsageFlags usage, VmaMemoryUsage vmaUsage,
+                     VkImage& image, VmaAllocation& allocation);
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
@@ -48,12 +53,15 @@ private:
 
     VkCommandPool mTransferCommandPool = VK_NULL_HANDLE;
 
+    // VMA
+    VmaAllocator mAllocator = VK_NULL_HANDLE;
+
     bool createInstance();
     bool createSurface();
     bool selectPhysicalDevice();
     bool createLogicalDevice();
     bool createTransferCommandPool();
     
-    // Memory helper
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    // VMA
+    bool createAllocator();
 };

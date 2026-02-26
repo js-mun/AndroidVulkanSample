@@ -22,18 +22,16 @@ bool VulkanSwapchain::createSwapchainAndViews() {
 
 void VulkanSwapchain::cleanup() {
     VkDevice device = mContext->getDevice();
+    VmaAllocator allocator = mContext->getAllocator();
 
     if (mDepthImageView != VK_NULL_HANDLE) {
         vkDestroyImageView(device, mDepthImageView, nullptr);
         mDepthImageView = VK_NULL_HANDLE;
     }
     if (mDepthImage != VK_NULL_HANDLE) {
-        vkDestroyImage(device, mDepthImage, nullptr);
+        vmaDestroyImage(allocator, mDepthImage, mDepthImageAllocation);
         mDepthImage = VK_NULL_HANDLE;
-    }
-    if (mDepthImageMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(device, mDepthImageMemory, nullptr);
-        mDepthImageMemory = VK_NULL_HANDLE;
+        mDepthImageAllocation = VK_NULL_HANDLE;
     }
 
     for (auto framebuffer : mSwapchainFramebuffers) {
@@ -143,6 +141,7 @@ bool VulkanSwapchain::createImageViews() {
 bool VulkanSwapchain::createDepthResources() {
     mDepthFormat = findDepthFormat();
     VkDevice device = mContext->getDevice();
+    VmaAllocator allocator = mContext->getAllocator();
 
     VkImageCreateInfo imageInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -158,36 +157,14 @@ bool VulkanSwapchain::createDepthResources() {
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateImage(device, &imageInfo, nullptr, &mDepthImage) != VK_SUCCESS) {
+    VmaAllocationCreateInfo allocInfo = {};
+    allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+    if (vmaCreateImage(allocator, &imageInfo, &allocInfo, &mDepthImage,
+                       &mDepthImageAllocation, nullptr) != VK_SUCCESS) {
         LOGE("Failed to create depth image");
         return false;
     }
-
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(device, mDepthImage, &memRequirements);
-
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(mContext->getPhysicalDevice(), &memProperties);
-
-    uint32_t memoryTypeIndex = uint32_t(-1);
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-        if ((memRequirements.memoryTypeBits & (1 << i)) &&
-            (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-            memoryTypeIndex = i;
-            break;
-        }
-    }
-
-    VkMemoryAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryTypeIndex;
-
-    if (vkAllocateMemory(device, &allocInfo, nullptr, &mDepthImageMemory) != VK_SUCCESS) {
-        LOGE("Failed to allocate depth image memory");
-        return false;
-    }
-
-    vkBindImageMemory(device, mDepthImage, mDepthImageMemory, 0);
 
     VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
     viewInfo.image = mDepthImage;
@@ -197,6 +174,9 @@ bool VulkanSwapchain::createDepthResources() {
 
     if (vkCreateImageView(device, &viewInfo, nullptr, &mDepthImageView) != VK_SUCCESS) {
         LOGE("Failed to create depth image view");
+        vmaDestroyImage(allocator, mDepthImage, mDepthImageAllocation);
+        mDepthImage = VK_NULL_HANDLE;
+        mDepthImageAllocation = VK_NULL_HANDLE;
         return false;
     }
     return true;

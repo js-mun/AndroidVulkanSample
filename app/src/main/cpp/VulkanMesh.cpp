@@ -12,16 +12,16 @@ void VulkanMesh::initialize(VulkanContext* context,
     // Staging Buffer 생성
     VkDeviceSize vertexBufferSize = sizeof(Vertex) * vertices.size();
     VulkanBuffer stagingBufferVertex(
-            context->getDevice(), context->getPhysicalDevice(), vertexBufferSize,
+            context->getAllocator(), vertexBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            VMA_MEMORY_USAGE_CPU_TO_GPU
     );
     stagingBufferVertex.copyTo(vertices.data(), vertexBufferSize);
     // Device Local Memory (GPU) 버퍼 생성
     mVertexBuffer = std::make_unique<VulkanBuffer>(
-            context->getDevice(), context->getPhysicalDevice(), vertexBufferSize,
+            context->getAllocator(), vertexBufferSize,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            VMA_MEMORY_USAGE_GPU_ONLY
     );
     // GPU 내부에서 복사 실행
     context->copyBuffer(stagingBufferVertex.getBuffer(), mVertexBuffer->getBuffer(), vertexBufferSize);
@@ -32,16 +32,16 @@ void VulkanMesh::initialize(VulkanContext* context,
     VkDeviceSize indexElementSize = (mIndexType == VK_INDEX_TYPE_UINT32) ? sizeof(uint32_t) : sizeof(uint16_t);
     VkDeviceSize indexBufferSize = indexElementSize * mIndexCount;
     VulkanBuffer stagingBufferIndex(
-            context->getDevice(), context->getPhysicalDevice(), indexBufferSize,
+            context->getAllocator(), indexBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            VMA_MEMORY_USAGE_CPU_TO_GPU
     );
     stagingBufferIndex.copyTo(indexData, indexBufferSize);
     // Device Local Memory (GPU) 버퍼 생성
     mIndexBuffer = std::make_unique<VulkanBuffer>(
-            context->getDevice(), context->getPhysicalDevice(), indexBufferSize,
+            context->getAllocator(), indexBufferSize,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            VMA_MEMORY_USAGE_GPU_ONLY
     );
 
     // GPU 내부에서 복사 실행

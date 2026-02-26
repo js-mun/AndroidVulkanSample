@@ -7,10 +7,14 @@ VulkanTexture::VulkanTexture(VulkanContext* context) : mContext(context) {
 
 VulkanTexture::~VulkanTexture() {
     VkDevice device = mContext->getDevice();
+    VmaAllocator allocator = mContext->getAllocator();
     if (mTextureSampler != VK_NULL_HANDLE) vkDestroySampler(device, mTextureSampler, nullptr);
     if (mTextureImageView != VK_NULL_HANDLE) vkDestroyImageView(device, mTextureImageView, nullptr);
-    if (mTextureImage != VK_NULL_HANDLE) vkDestroyImage(device, mTextureImage, nullptr);
-    if (mTextureImageMemory != VK_NULL_HANDLE) vkFreeMemory(device, mTextureImageMemory, nullptr);
+    if (mTextureImage != VK_NULL_HANDLE) {
+        vmaDestroyImage(allocator, mTextureImage, mTextureAllocation);
+        mTextureImage = VK_NULL_HANDLE;
+        mTextureAllocation = VK_NULL_HANDLE;
+    }
 }
 
 bool VulkanTexture::loadFromMemory(const unsigned char* pixels, uint32_t width, uint32_t height, VkFormat format) {
@@ -18,9 +22,9 @@ bool VulkanTexture::loadFromMemory(const unsigned char* pixels, uint32_t width, 
 
     // 1. 스테이징 버퍼 생성 및 데이터 복사
     VulkanBuffer stagingBuffer(
-        mContext->getDevice(), mContext->getPhysicalDevice(), imageSize,
+        mContext->getAllocator(), imageSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        VMA_MEMORY_USAGE_CPU_TO_GPU
     );
     stagingBuffer.copyTo(pixels, imageSize);
 
@@ -28,8 +32,8 @@ bool VulkanTexture::loadFromMemory(const unsigned char* pixels, uint32_t width, 
     mContext->createImage(
         width, height, format, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        mTextureImage, mTextureImageMemory
+        VMA_MEMORY_USAGE_GPU_ONLY,
+        mTextureImage, mTextureAllocation
     );
 
     // 3. 레이아웃 전환: UNDEFINED -> TRANSFER_DST

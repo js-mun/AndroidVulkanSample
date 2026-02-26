@@ -43,6 +43,8 @@ target_compile_definitions(mygame PRIVATE
         TINYGLTF_ANDROID_LOAD_FROM_ASSETS # 안드로이드 에셋 로딩 활성화
 )
 
+target_include_directories(mygame SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include)
+
 # Dependencies
 find_package(game-activity REQUIRED CONFIG)
 
