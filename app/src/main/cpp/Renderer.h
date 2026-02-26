@@ -26,6 +26,8 @@ public:
     void render();
     bool mFramebufferResized = false;
 
+    void handleTouchDrag(float dx, float dy);
+    void handlePinchZoom(float delta);
 
 private:
     android_app* mApp;

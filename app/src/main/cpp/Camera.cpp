@@ -1,27 +1,33 @@
 #include "Camera.h"
 #include <algorithm>
+#include "Log.h"
 
 Camera::Camera() : mVPMatrix(1.0f) {
+    mYaw = glm::radians(45.0f);
+    mPitch = glm::radians(30.0f);
+    mRadius = 15.0f;
 }
 
 void Camera::update(float width, float height, VkSurfaceTransformFlagBitsKHR transform) {
     // 1. 카메라 위치 고정
-    float camX = 0.0f;
-    float camZ = 10.0f; // 큐브로부터 X만큼 떨어진 정면
+    float camX = mRadius * cos(mPitch) * sin(mYaw);
+    float camY = mRadius * sin(mPitch);
+    float camZ = mRadius * cos(mPitch) * cos(mYaw);
 
     // 2. 뷰 행렬
-    glm::mat4 view = glm::lookAt(glm::vec3(camX, 2.0f, camZ), // 위아래로 2.0만큼 띄움
+    glm::mat4 view = glm::lookAt(glm::vec3(camX, camY, camZ),
                                  glm::vec3(0.0f, 0.0f, 0.0f), // 원점을 바라봄
                                  glm::vec3(0.0f, 1.0f, 0.0f));
 
     // 3. 투영 행렬: 원근법 적용
     float aspect = width / height;
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
+    glm::mat4 proj = glm::perspective(
+            glm::radians(45.0f), aspect, 0.1f, 100.0f); // 가시거리 0.1 ~ 100
 
     // 4. 기기 회전 보정
     glm::mat4 deviceRotation = calculateRotation(transform);
 
-    // 5. [수정] View-Projection 결합 (Model 제외)
+    // 5. 조합
     mVPMatrix = deviceRotation * proj * view;
 }
 
@@ -37,4 +43,22 @@ glm::mat4 Camera::calculateRotation(VkSurfaceTransformFlagBitsKHR transform) {
     }
 
     return rotation;
+}
+
+void Camera::rotate(float deltaYaw, float deltaPitch) {
+    mYaw -= deltaYaw;
+    mPitch += deltaPitch;
+
+    // [중요] Pitch 제한: 89도는 lookAt이 깨질 수 있으므로 80도 정도로 안전하게 제한
+    const float limit = glm::radians(80.0f);
+    if (mPitch > limit) mPitch = limit;
+    if (mPitch < -limit) mPitch = -limit;
+}
+
+void Camera::zoom(float delta) {
+    mRadius -= delta;
+
+    // 줌 제한 (너무 가깝거나 너무 멀지 않게)
+    if (mRadius < 2.0f) mRadius = 2.0f;
+    if (mRadius > 50.0f) mRadius = 50.0f;
 }

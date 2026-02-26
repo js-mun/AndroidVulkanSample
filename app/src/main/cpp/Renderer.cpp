@@ -31,7 +31,8 @@ bool Renderer::initialize() {
 
     // 텍스처를 위해 DescriptorSetLayout을 생성할 때 Sampler 바인딩이 포함됨
     mPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
-    if (!mPipeline->initialize(mSwapchain->getImageFormat(), mSwapchain->getDepthFormat(), mApp->activity->assetManager)) {
+    if (!mPipeline->initialize(mSwapchain->getImageFormat(),
+       mSwapchain->getDepthFormat(), mApp->activity->assetManager)) {
         LOGE("Failed to initialize Vulkan Pipeline");
         return false;
     }
@@ -41,13 +42,15 @@ bool Renderer::initialize() {
         return false;
     }
 
-    mSync = std::make_unique<VulkanSync>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
+    mSync = std::make_unique<VulkanSync>(
+            mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
     if (!mSync->initialize()) {
         LOGE("Failed to initialize VulkanSync");
         return false;
     }
 
-    mCommand = std::make_unique<VulkanCommand>(mContext->getDevice(), mContext->getGraphicsQueueFamilyIndex());
+    mCommand = std::make_unique<VulkanCommand>(
+            mContext->getDevice(), mContext->getGraphicsQueueFamilyIndex());
     if (!mCommand->initialize(MAX_FRAMES_IN_FLIGHT)) {
         LOGE("Failed to initialize VulkanCommand");
         return false;
@@ -111,7 +114,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 
     // Descriptor Set 바인딩 (UBO 데이터 연결)
     VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
 
     // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
     VkViewport viewport{};
@@ -153,7 +157,9 @@ void Renderer::render() {
 
     // 스왑체인에서 이미지 가져오기
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(mContext->getDevice(), mSwapchain->getSwapchain(), UINT64_MAX, mSync->getImageAvailableSemaphore(mCurrentFrame), VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(mContext->getDevice(), mSwapchain->getSwapchain(),
+        UINT64_MAX, mSync->getImageAvailableSemaphore(mCurrentFrame),
+        VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         LOGI("Failed to acquire next image by VK_ERROR_OUT_OF_DATE_KHR");
         mSwapchain->recreate(mPipeline->getRenderPass());
@@ -187,7 +193,8 @@ void Renderer::render() {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(mContext->getGraphicsQueue(), 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
+    if (vkQueueSubmit(mContext->getGraphicsQueue(), 1,
+                      &submitInfo, inFlightFence) != VK_SUCCESS) {
         LOGE("Failed to submit draw command buffer");
     }
 
@@ -216,15 +223,18 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
     // 1. 앱 시작 후 경과 시간 계산
     static auto startTime = std::chrono::steady_clock::now();
     auto currentTime = std::chrono::steady_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(
+            currentTime - startTime).count();
 
     // 2. 카메라 업데이트 (VP 행렬 계산)
     mCamera->update(static_cast<float>(mSwapchain->getExtent().width),
                     static_cast<float>(mSwapchain->getExtent().height),
                     mSwapchain->getTransform());
 
-    // 3. [핵심] 모델에게 현재 시간에 맞는 변환 행렬을 가져옴
-    glm::mat4 modelMatrix = mModel->getAnimationTransform(time);
+    // 3. [핵심] 모델에게 현재 시간에 맞는 변환 행렬을 가져옴 -> 터치로 카메라 회전하도록 변경하여 주석처리.
+    // glm::mat4 modelMatrix = mModel->getAnimationTransform(time);
+
+    glm::mat4 modelMatrix = glm::mat4(1.0f);
 
     // 4. 최종 MVP 조합 (VP * M)
     UniformBufferObject ubo{};
@@ -232,4 +242,14 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
 
     // 5. GPU 전송
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
+}
+
+void Renderer::handleTouchDrag(float dx, float dy) {
+    float sensitivity = 0.00003f;
+    mCamera->rotate(dx * sensitivity, dy * sensitivity);
+}
+
+void Renderer::handlePinchZoom(float delta) {
+    float zoomSensitivity = 0.01f;
+    mCamera->zoom(delta * zoomSensitivity);
 }

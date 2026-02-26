@@ -93,6 +93,9 @@ void android_main(struct android_app *pApp) {
     // implemented in android_native_app_glue.c.
     android_app_set_motion_event_filter(pApp, motion_event_filter_func);
 
+    float lastX = 0.0f, lastY = 0.0f;
+    float lastPinchDist = 0.0f;
+
     // This sets up a typical game/event loop. It will run until the app is destroyed.
     do {
         // Process all pending events before running game logic.
@@ -128,9 +131,54 @@ void android_main(struct android_app *pApp) {
             // We know that our user data is a Renderer, so reinterpret cast it. If you change your
             // user data remember to change it here
             auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
+
+            auto* inputBuffer = android_app_swap_input_buffers(pApp);
+            if (inputBuffer) {
+                // 1. 모션 이벤트(터치) 처리
+                for (size_t i = 0; i < inputBuffer->motionEventsCount; i++) {
+                    auto& motionEvent = inputBuffer->motionEvents[i];
+                    int32_t action = motionEvent.action & AMOTION_EVENT_ACTION_MASK;
+                    uint32_t pointerCount = motionEvent.pointerCount;
+                    if (pointerCount >= 2) {
+                        float x0 = GameActivityPointerAxes_getX(&motionEvent.pointers[0]);
+                        float y0 = GameActivityPointerAxes_getY(&motionEvent.pointers[0]);
+                        float x1 = GameActivityPointerAxes_getX(&motionEvent.pointers[1]);
+                        float y1 = GameActivityPointerAxes_getY(&motionEvent.pointers[1]);
+
+                        // 피타고라스 정리로 두 점 사이의 거리 계산
+                        float dist = sqrtf((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+
+                        if (action == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+                            lastPinchDist = dist;
+                        } else if (action == AMOTION_EVENT_ACTION_MOVE) {
+                            float delta = dist - lastPinchDist;
+                            pRenderer->handlePinchZoom(delta);
+                            lastPinchDist = dist;
+                        }
+                    } else if (pointerCount == 1) {
+                        float x = GameActivityPointerAxes_getX(&motionEvent.pointers[0]);
+                        float y = GameActivityPointerAxes_getY(&motionEvent.pointers[0]);
+                        switch (action) {
+                            case AMOTION_EVENT_ACTION_DOWN:
+                                lastX = x;
+                                lastY = y;
+                                break;
+                            case AMOTION_EVENT_ACTION_MOVE:
+                                pRenderer->handleTouchDrag(x - lastX, y - lastY);
+                                break;
+                            case AMOTION_EVENT_ACTION_UP:
+                                lastX = x;
+                                lastY = y;
+                                break;
+                        }
+
+                    }
+                }
+                android_app_clear_motion_events(inputBuffer); // 모션 이벤트 처리 완료
+                android_app_clear_key_events(inputBuffer); // 키 이벤트 처리 완료
+            }
+
             pRenderer->render();
-            // Process game input
-            // pRenderer->handleInput();
         }
     } while (!pApp->destroyRequested);
 }
