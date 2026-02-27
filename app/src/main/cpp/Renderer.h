@@ -38,7 +38,8 @@ private:
     android_app* mApp;
     std::unique_ptr<VulkanContext> mContext;
     std::unique_ptr<VulkanSwapchain> mSwapchain;
-    std::unique_ptr<VulkanPipeline> mPipeline;
+    std::unique_ptr<VulkanPipeline> mMainPipeline;
+    std::unique_ptr<VulkanPipeline> mShadowPipeline;
     std::unique_ptr<VulkanSync> mSync;
     std::unique_ptr<VulkanCommand> mCommand;
     std::unique_ptr<VulkanDescriptor> mDescriptor;

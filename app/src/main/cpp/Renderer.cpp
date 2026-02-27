@@ -29,15 +29,22 @@ bool Renderer::initialize() {
         return false;
     }
 
-    // 텍스처를 위해 DescriptorSetLayout을 생성할 때 Sampler 바인딩이 포함됨
-    mPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
-    if (!mPipeline->initialize(mSwapchain->getImageFormat(),
-       mSwapchain->getDepthFormat(), mApp->activity->assetManager)) {
+    PipelineConfig mainConfig;
+    mainConfig.vertShaderPath = "shaders/main.vert.spv";
+    mainConfig.fragShaderPath = "shaders/main.frag.spv";
+    mainConfig.depthOnly = false;
+    mainConfig.cullMode = VK_CULL_MODE_BACK_BIT;
+    mainConfig.depthBiasConstant = 0.0f;
+    mainConfig.depthBiasSlope = 0.0f;
+
+    mMainPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
+    if (!mMainPipeline->initialize(mSwapchain->getImageFormat(), mSwapchain->getDepthFormat(),
+                               mApp->activity->assetManager, mainConfig)) {
         LOGE("Failed to initialize Vulkan Pipeline");
         return false;
     }
 
-    if (!mSwapchain->createFramebuffers(mPipeline->getRenderPass())) {
+    if (!mSwapchain->createFramebuffers(mMainPipeline->getRenderPass())) {
         LOGE("Failed to initialize VulkanSwapchain(Framebuffers)");
         return false;
     }
@@ -76,7 +83,7 @@ bool Renderer::initialize() {
 
     // 모델의 텍스처 리스트를 전달합니다.
     mDescriptor = std::make_unique<VulkanDescriptor>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
-    if (!mDescriptor->initialize(mPipeline->getDescriptorSetLayout(), mUniformBuffers, mModel->getTextures())) {
+    if (!mDescriptor->initialize(mMainPipeline->getDescriptorSetLayout(), mUniformBuffers, mModel->getTextures())) {
         LOGE("Failed to initialize VulkanDescriptor");
         return false;
     }
@@ -112,7 +119,7 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
         [this, imageIndex](VkCommandBuffer commandBuffer) {
             VkRenderPassBeginInfo renderPassInfo{};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.renderPass = mPipeline->getRenderPass();
+            renderPassInfo.renderPass = mMainPipeline->getRenderPass();
             renderPassInfo.framebuffer = mSwapchain->getFramebuffers()[imageIndex];
             renderPassInfo.renderArea.offset = {0, 0};
             renderPassInfo.renderArea.extent = mSwapchain->getExtent();
@@ -124,12 +131,12 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             renderPassInfo.pClearValues = clearValues.data();
 
             vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getGraphicsPipeline());
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mMainPipeline->getGraphicsPipeline());
 
             // Descriptor Set 바인딩 (UBO 데이터 연결)
             VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    mPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
+                                    mMainPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
 
             // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
             VkViewport viewport{};
@@ -154,7 +161,9 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
         }
     });
 
-    mRenderGraph->compile({"swapchain_color", "swapchain_depth"});
+    if (!mRenderGraph->compile({"swapchain_color", "swapchain_depth"})) {
+        LOGE("Failed to compile Render Graph");
+    }
 }
 
 void Renderer::executeFrameGraph(VkCommandBuffer commandBuffer) {
@@ -165,7 +174,7 @@ void Renderer::render() {
     if (mFramebufferResized) {
         LOGI("Buffer resized");
         mFramebufferResized = false;
-        mSwapchain->recreate(mPipeline->getRenderPass());
+        mSwapchain->recreate(mMainPipeline->getRenderPass());
         return;
     }
 
@@ -184,7 +193,7 @@ void Renderer::render() {
         VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         LOGI("Failed to acquire next image by VK_ERROR_OUT_OF_DATE_KHR");
-        mSwapchain->recreate(mPipeline->getRenderPass());
+        mSwapchain->recreate(mMainPipeline->getRenderPass());
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         LOGE("Failed to acquire swapchain image!");
@@ -234,7 +243,7 @@ void Renderer::render() {
     result = vkQueuePresentKHR(mContext->getGraphicsQueue(), &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         LOGI("Failed to queue present by VK_ERROR_OUT_OF_DATE_KHR");
-        mSwapchain->recreate(mPipeline->getRenderPass());
+        mSwapchain->recreate(mMainPipeline->getRenderPass());
     }
 
     // 다음 프레임 인덱스로 교체
