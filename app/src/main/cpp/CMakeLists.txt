@@ -17,6 +17,7 @@ FetchContent_MakeAvailable(glm)
 add_library(mygame SHARED
         main.cpp
         Renderer.cpp
+        RenderGraph.cpp
         asset_utils.cpp
         VulkanBuffer.cpp
         VulkanContext.cpp
@@ -44,6 +45,10 @@ target_compile_definitions(mygame PRIVATE
 )
 
 target_include_directories(mygame SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include)
+
+target_compile_definitions(mygame PRIVATE
+        DEBUG_LOG=0
+)
 
 # Dependencies
 find_package(game-activity REQUIRED CONFIG)

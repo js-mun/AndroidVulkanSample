@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Camera.h"
+#include "RenderGraph.h"
 #include "VulkanBuffer.h"
 #include "VulkanCommand.h"
 #include "VulkanContext.h"
@@ -19,15 +20,19 @@
 
 class Renderer {
 public:
+    bool mFramebufferResized = false;
+    
     explicit Renderer(android_app* app);
     virtual ~Renderer();
 
     bool initialize();
     void render();
-    bool mFramebufferResized = false;
 
     void handleTouchDrag(float dx, float dy);
     void handlePinchZoom(float delta);
+
+    void buildFrameGraph(uint32_t imageIndex);
+    void executeFrameGraph(VkCommandBuffer commandBuffer);
 
 private:
     android_app* mApp;
@@ -41,6 +46,8 @@ private:
     std::unique_ptr<VulkanModel> mModel;
 
     std::unique_ptr<Camera> mCamera;
+
+    std::unique_ptr<RenderGraph> mRenderGraph;
 
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;

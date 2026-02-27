@@ -83,6 +83,8 @@ bool Renderer::initialize() {
 
     mCamera = std::make_unique<Camera>();
 
+    mRenderGraph = std::make_unique<RenderGraph>();
+
     LOGI("Vulkan Initialization Wrap-up Successful!");
 
     return true;
@@ -96,47 +98,67 @@ Renderer::~Renderer() {
 }
 
 void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
-    VkRenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = mPipeline->getRenderPass();
-    renderPassInfo.framebuffer = mSwapchain->getFramebuffers()[imageIndex];
-    renderPassInfo.renderArea.offset = {0, 0};
-    renderPassInfo.renderArea.extent = mSwapchain->getExtent();
+    buildFrameGraph(imageIndex);
+    executeFrameGraph(commandBuffer);
+}
 
-    std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color = {{0.2f, 0.2f, 0.2f, 1.0f}}; // 어두운 회색 클리어
-    clearValues[1].depthStencil = {1.0f, 0};                     // 가장 먼 깊이(1.0)로 클리어
-    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-    renderPassInfo.pClearValues = clearValues.data();
+void Renderer::buildFrameGraph(uint32_t imageIndex) {
+    mRenderGraph->reset();
 
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getGraphicsPipeline());
+    mRenderGraph->addPass({
+        "MainScene",
+        {},
+        {"swapchain_color", "swapchain_depth"},
+        [this, imageIndex](VkCommandBuffer commandBuffer) {
+            VkRenderPassBeginInfo renderPassInfo{};
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.renderPass = mPipeline->getRenderPass();
+            renderPassInfo.framebuffer = mSwapchain->getFramebuffers()[imageIndex];
+            renderPassInfo.renderArea.offset = {0, 0};
+            renderPassInfo.renderArea.extent = mSwapchain->getExtent();
 
-    // Descriptor Set 바인딩 (UBO 데이터 연결)
-    VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
+            std::array<VkClearValue, 2> clearValues{};
+            clearValues[0].color = {{0.2f, 0.2f, 0.2f, 1.0f}}; // 어두운 회색 클리어
+            clearValues[1].depthStencil = {1.0f, 0};                     // 가장 먼 깊이(1.0)로 클리어
+            renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+            renderPassInfo.pClearValues = clearValues.data();
 
-    // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = (float)mSwapchain->getExtent().height;
-    viewport.width = (float)mSwapchain->getExtent().width;
-    viewport.height = -(float)mSwapchain->getExtent().height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline->getGraphicsPipeline());
 
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = mSwapchain->getExtent();
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            // Descriptor Set 바인딩 (UBO 데이터 연결)
+            VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    mPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
 
-    if (mModel) {
-        mModel->draw(commandBuffer);
-    }
+            // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = (float)mSwapchain->getExtent().height;
+            viewport.width = (float)mSwapchain->getExtent().width;
+            viewport.height = -(float)mSwapchain->getExtent().height;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-    vkCmdEndRenderPass(commandBuffer);
+            VkRect2D scissor{};
+            scissor.offset = {0, 0};
+            scissor.extent = mSwapchain->getExtent();
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+            if (mModel) {
+                mModel->draw(commandBuffer);
+            }
+
+            vkCmdEndRenderPass(commandBuffer);
+        }
+    });
+
+    mRenderGraph->compile({"swapchain_color", "swapchain_depth"});
+}
+
+void Renderer::executeFrameGraph(VkCommandBuffer commandBuffer) {
+    mRenderGraph->execute(commandBuffer);
 }
 
 void Renderer::render() {
