@@ -129,9 +129,11 @@ bool VulkanPipeline::createDescriptorSetLayout() {
     // Binding 0: Uniform Buffer (Vertex Shader)
     bindings.push_back({0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
             VK_SHADER_STAGE_VERTEX_BIT, nullptr});
-    // ShadowPipeline에도 binding 1이 추가되는데, mDescriptor 재사용을 위해 일부러 추가 
-    // 즉, main/shadow 모두 binding 0+1 공통 레이아웃, 나중에 필요 시 Descriptor 분리 가능
-    bindings.push_back({1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr});
+    // ShadowPipeline에도 binding 1, 2가 추가되는데, mDescriptor 재사용을 위해 추가 
+    bindings.push_back({1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
+            VK_SHADER_STAGE_FRAGMENT_BIT, nullptr});
+    bindings.push_back({2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
+            VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}); // shadow map
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -212,7 +214,13 @@ bool VulkanPipeline::createGraphicsPipeline(AAssetManager* assetManager) {
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
-    std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    std::vector<VkDynamicState> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+    if (mConfig.depthOnly) {
+        dynamicStates.push_back(VK_DYNAMIC_STATE_DEPTH_BIAS); // For vkCmdSetDepthBias()
+    }
     VkPipelineDynamicStateCreateInfo dynamicStateInfo = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
     dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicStateInfo.pDynamicStates = dynamicStates.data();

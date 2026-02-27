@@ -18,6 +18,7 @@ add_library(mygame SHARED
         main.cpp
         Renderer.cpp
         RenderGraph.cpp
+        ShadowResources.cpp
         asset_utils.cpp
         VulkanBuffer.cpp
         VulkanContext.cpp

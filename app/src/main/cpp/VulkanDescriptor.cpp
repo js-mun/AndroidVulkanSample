@@ -14,11 +14,12 @@ VulkanDescriptor::~VulkanDescriptor() {
 }
 
 bool VulkanDescriptor::initialize(VkDescriptorSetLayout layout,
-                                const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
-                                const std::vector<std::unique_ptr<VulkanTexture>>& textures) {
+        const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
+        const std::vector<std::unique_ptr<VulkanTexture>>& textures,
+        VkImageView shadowView, VkSampler shadowSampler) {
     if (!createDescriptorPool(static_cast<uint32_t>(textures.size()))) return false;
     if (!allocateDescriptorSets(layout)) return false;
-    updateDescriptorSets(uniformBuffers, textures);
+    updateDescriptorSets(uniformBuffers, textures, shadowView, shadowSampler);
     return true;
 }
 
@@ -31,7 +32,7 @@ bool VulkanDescriptor::createDescriptorPool(uint32_t textureCount) {
     
     // 2. 텍스처 샘플러용 풀 사이즈 (텍스처 개수만큼)
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = mMaxFramesInFlight * std::max(1u, textureCount);
+    poolSizes[1].descriptorCount = mMaxFramesInFlight * (std::max(1u, textureCount) + 1u);
 
     VkDescriptorPoolCreateInfo poolInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -60,8 +61,10 @@ bool VulkanDescriptor::allocateDescriptorSets(VkDescriptorSetLayout layout) {
     return true;
 }
 
-void VulkanDescriptor::updateDescriptorSets(const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
-                                          const std::vector<std::unique_ptr<VulkanTexture>>& textures) {
+void VulkanDescriptor::updateDescriptorSets(
+        const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
+        const std::vector<std::unique_ptr<VulkanTexture>>& textures,
+        VkImageView shadowView, VkSampler shadowSampler) {
     for (size_t i = 0; i < mMaxFramesInFlight; i++) {
         std::vector<VkWriteDescriptorSet> descriptorWrites;
 
@@ -98,6 +101,41 @@ void VulkanDescriptor::updateDescriptorSets(const std::vector<std::unique_ptr<Vu
         samplerWrite.pImageInfo = &imageInfo;
         descriptorWrites.push_back(samplerWrite);
 
-        vkUpdateDescriptorSets(mDevice, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        // 3. Shadow 업데이트 (Binding 2)
+        VkDescriptorImageInfo shadowInfo{};
+        shadowInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        shadowInfo.imageView = shadowView;
+        shadowInfo.sampler = shadowSampler;
+
+        VkWriteDescriptorSet shadowWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+        shadowWrite.dstSet = mDescriptorSets[i];
+        shadowWrite.dstBinding = 2;
+        shadowWrite.dstArrayElement = 0;
+        shadowWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        shadowWrite.descriptorCount = 1;
+        shadowWrite.pImageInfo = &shadowInfo;
+        descriptorWrites.push_back(shadowWrite);
+
+        vkUpdateDescriptorSets(mDevice, static_cast<uint32_t>(descriptorWrites.size()),
+                descriptorWrites.data(), 0, nullptr);
     }
 }
+
+void VulkanDescriptor::updateShadowMap(VkImageView shadowView, VkSampler shadowSampler) {
+    for (size_t i = 0; i < mMaxFramesInFlight; i++) {
+        VkDescriptorImageInfo shadowInfo{};
+        shadowInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        shadowInfo.imageView = shadowView;
+        shadowInfo.sampler = shadowSampler;
+
+        VkWriteDescriptorSet shadowWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+        shadowWrite.dstSet = mDescriptorSets[i];
+        shadowWrite.dstBinding = 2;
+        shadowWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        shadowWrite.descriptorCount = 1;
+        shadowWrite.pImageInfo = &shadowInfo;
+
+        vkUpdateDescriptorSets(mDevice, 1, &shadowWrite, 0, nullptr);
+    }
+}
+

@@ -7,6 +7,7 @@
 
 struct UniformBufferObject {
     glm::mat4 mvp;
+    glm::mat4 lightMVP;
 };
 
 struct Vertex {

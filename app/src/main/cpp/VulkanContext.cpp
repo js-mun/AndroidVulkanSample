@@ -240,7 +240,7 @@ void VulkanContext::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceS
     endSingleTimeCommands(commandBuffer);
 }
 
-void VulkanContext::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
+bool VulkanContext::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
                  VkImageUsageFlags usage, VmaMemoryUsage vmaUsage,
                  VkImage& image, VmaAllocation& allocation) {
     VkImageCreateInfo imageInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
@@ -264,8 +264,9 @@ void VulkanContext::createImage(uint32_t width, uint32_t height, VkFormat format
     // 기존 vkCreateImage, findMemoryType, vkAllocateMemory, vkBindImageMemory를 이 하나로 대체
     if (vmaCreateImage(mAllocator, &imageInfo, &allocInfo, &image, &allocation, nullptr) != VK_SUCCESS) {
         LOGE("Failed to create VMA image");
-        return;
+        return false;
     }
+    return true;
 }
 
 void VulkanContext::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {

@@ -35,7 +35,7 @@ public:
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     
     // Image Utils
-    void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
+    bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
                      VkImageUsageFlags usage, VmaMemoryUsage vmaUsage,
                      VkImage& image, VmaAllocation& allocation);
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);

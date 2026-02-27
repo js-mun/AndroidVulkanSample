@@ -8,6 +8,7 @@
 
 #include "Camera.h"
 #include "RenderGraph.h"
+#include "ShadowResources.h"
 #include "VulkanBuffer.h"
 #include "VulkanCommand.h"
 #include "VulkanContext.h"
@@ -40,6 +41,7 @@ private:
     std::unique_ptr<VulkanSwapchain> mSwapchain;
     std::unique_ptr<VulkanPipeline> mMainPipeline;
     std::unique_ptr<VulkanPipeline> mShadowPipeline;
+    std::unique_ptr<ShadowResources> mShadowResources;
     std::unique_ptr<VulkanSync> mSync;
     std::unique_ptr<VulkanCommand> mCommand;
     std::unique_ptr<VulkanDescriptor> mDescriptor;
@@ -54,6 +56,8 @@ private:
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
     std::vector<std::unique_ptr<VulkanBuffer>> mUniformBuffers;
+
+    std::unique_ptr<VulkanMesh> mGroundMesh;
 
 private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);

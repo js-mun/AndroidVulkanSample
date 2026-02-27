@@ -49,6 +49,27 @@ bool Renderer::initialize() {
         return false;
     }
 
+    PipelineConfig shadowConfig;
+    shadowConfig.vertShaderPath = "shaders/shadow.vert.spv";
+    shadowConfig.depthOnly = true;
+    shadowConfig.cullMode = VK_CULL_MODE_BACK_BIT;
+    shadowConfig.depthBiasConstant = 1.25f;
+    shadowConfig.depthBiasSlope = 1.75f;
+
+    mShadowPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
+    if (!mShadowPipeline->initialize(mSwapchain->getImageFormat(), 
+            mSwapchain->getDepthFormat(), mApp->activity->assetManager, shadowConfig)) {
+        LOGE("Failed to initialize Vulkan Pipeline");
+        return false;
+    }
+
+    mShadowResources = std::make_unique<ShadowResources>(mContext.get());
+    if (!mShadowResources->initialize(mShadowPipeline->getRenderPass(),
+            mSwapchain->getDepthFormat())) {
+        LOGE("Failed to initialize shadow resources");
+        return false;
+    }
+
     mSync = std::make_unique<VulkanSync>(
             mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
     if (!mSync->initialize()) {
@@ -83,7 +104,11 @@ bool Renderer::initialize() {
 
     // 모델의 텍스처 리스트를 전달합니다.
     mDescriptor = std::make_unique<VulkanDescriptor>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
-    if (!mDescriptor->initialize(mMainPipeline->getDescriptorSetLayout(), mUniformBuffers, mModel->getTextures())) {
+    if (!mDescriptor->initialize(mMainPipeline->getDescriptorSetLayout(), 
+            mUniformBuffers,
+            mModel->getTextures(), 
+            mShadowResources->getDepthView(), 
+            mShadowResources->getSampler())) {
         LOGE("Failed to initialize VulkanDescriptor");
         return false;
     }
@@ -91,6 +116,19 @@ bool Renderer::initialize() {
     mCamera = std::make_unique<Camera>();
 
     mRenderGraph = std::make_unique<RenderGraph>();
+
+    // Ground plane (y = -0.5)
+    std::vector<Vertex> groundVertices = {
+        {{-5.0f, -1.5f, -5.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
+        {{ 5.0f, -1.5f, -5.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}},
+        {{ 5.0f, -1.5f,  5.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+        {{-5.0f, -1.5f,  5.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+    };
+    std::vector<uint32_t> groundIndices = {
+        0, 2, 1,
+        2, 0, 3
+    };
+    mGroundMesh = std::make_unique<VulkanMesh>(mContext.get(), groundVertices, groundIndices);
 
     LOGI("Vulkan Initialization Wrap-up Successful!");
 
@@ -112,9 +150,64 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 void Renderer::buildFrameGraph(uint32_t imageIndex) {
     mRenderGraph->reset();
 
+    // 1) Shadow Pass
+    mRenderGraph->addPass({
+        "ShadowPass",
+        {},                 // reads
+        {"shadow_depth"},   // writes
+        [this](VkCommandBuffer commandBuffer) {
+            VkRenderPassBeginInfo rpInfo{};
+            rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            rpInfo.renderPass = mShadowPipeline->getRenderPass();
+            rpInfo.framebuffer = mShadowResources->getFramebuffer();
+            rpInfo.renderArea.offset = {0, 0};
+            rpInfo.renderArea.extent = mShadowResources->getExtent();
+
+            VkClearValue clear{};
+            clear.depthStencil = {1.0f, 0};
+            rpInfo.clearValueCount = 1;
+            rpInfo.pClearValues = &clear;
+
+            vkCmdBeginRenderPass(commandBuffer, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              mShadowPipeline->getGraphicsPipeline());
+
+            VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    mShadowPipeline->getPipelineLayout(),
+                                    0, 1, &set, 0, nullptr);
+
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(mShadowResources->getExtent().width);
+            viewport.height = static_cast<float>(mShadowResources->getExtent().height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+            VkRect2D scissor{};
+            scissor.offset = {0, 0};
+            scissor.extent = mShadowResources->getExtent();
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+            vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
+
+            if (mGroundMesh) {
+                mGroundMesh->draw(commandBuffer);
+            }
+            if (mModel) {
+                mModel->draw(commandBuffer);
+            }
+
+            vkCmdEndRenderPass(commandBuffer);
+        }
+    });
+
+    // 2) Main Pass
     mRenderGraph->addPass({
         "MainScene",
-        {},
+        {"shadow_depth"},
         {"swapchain_color", "swapchain_depth"},
         [this, imageIndex](VkCommandBuffer commandBuffer) {
             VkRenderPassBeginInfo renderPassInfo{};
@@ -152,7 +245,10 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             scissor.offset = {0, 0};
             scissor.extent = mSwapchain->getExtent();
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
+            
+            if (mGroundMesh) {
+                mGroundMesh->draw(commandBuffer);
+            }
             if (mModel) {
                 mModel->draw(commandBuffer);
             }
@@ -175,6 +271,10 @@ void Renderer::render() {
         LOGI("Buffer resized");
         mFramebufferResized = false;
         mSwapchain->recreate(mMainPipeline->getRenderPass());
+        mShadowResources->recreate(mShadowPipeline->getRenderPass(),
+                mSwapchain->getDepthFormat());
+        mDescriptor->updateShadowMap(mShadowResources->getDepthView(),
+                mShadowResources->getSampler());
         return;
     }
 
@@ -194,6 +294,10 @@ void Renderer::render() {
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         LOGI("Failed to acquire next image by VK_ERROR_OUT_OF_DATE_KHR");
         mSwapchain->recreate(mMainPipeline->getRenderPass());
+        mShadowResources->recreate(mShadowPipeline->getRenderPass(),
+                mSwapchain->getDepthFormat());
+        mDescriptor->updateShadowMap(mShadowResources->getDepthView(),
+                mShadowResources->getSampler());
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         LOGE("Failed to acquire swapchain image!");
@@ -244,6 +348,10 @@ void Renderer::render() {
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         LOGI("Failed to queue present by VK_ERROR_OUT_OF_DATE_KHR");
         mSwapchain->recreate(mMainPipeline->getRenderPass());
+        mShadowResources->recreate(mShadowPipeline->getRenderPass(),
+                mSwapchain->getDepthFormat());
+        mDescriptor->updateShadowMap(mShadowResources->getDepthView(),
+                mShadowResources->getSampler());
     }
 
     // 다음 프레임 인덱스로 교체
@@ -270,6 +378,21 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
     // 4. 최종 MVP 조합 (VP * M)
     UniformBufferObject ubo{};
     ubo.mvp = mCamera->getViewProjectionMatrix() * modelMatrix;
+
+    // lightMVP 업데이트
+    glm::mat4 lightView = glm::lookAt(
+        glm::vec3(2.5f, 4.0f, 2.5f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 1.0f, 0.0f));
+    float near_plane = 1.0f;  // 이 값을 조절 (너무 작으면 정밀도 하락)
+    float far_plane = 11.0f;  // 이 값을 조절 (너무 크면 정밀도 하락)
+    // 조명이 태양광(지향성 광원)이라면 ortho를 사용
+    glm::mat4 lightProj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f,
+                                           near_plane, far_plane);
+    // lightProj[1][1] *= -1.0f; // Vulkan clip correction
+
+    ubo.lightMVP = lightProj * lightView * modelMatrix;
+
 
     // 5. GPU 전송
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
