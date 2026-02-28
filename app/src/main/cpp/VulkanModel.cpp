@@ -97,6 +97,26 @@ bool VulkanModel::loadFromFile(AAssetManager* assetManager, const std::string& f
     return true;
 }
 
+bool VulkanModel::initializeDescriptor(VkDescriptorSetLayout layout,
+                                       const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
+                                       uint32_t maxFramesInFlight,
+                                       VkImageView shadowView,
+                                       VkSampler shadowSampler) {
+    mDescriptor = std::make_unique<VulkanDescriptor>(mContext->getDevice(), maxFramesInFlight);
+    return mDescriptor->initialize(layout, uniformBuffers, mTextures, shadowView, shadowSampler);
+}
+
+void VulkanModel::updateShadowMap(VkImageView shadowView, VkSampler shadowSampler) {
+    if (mDescriptor) {
+        mDescriptor->updateShadowMap(shadowView, shadowSampler);
+    }
+}
+
+VkDescriptorSet VulkanModel::getDescriptorSet(uint32_t frameIndex) const {
+    if (!mDescriptor) return VK_NULL_HANDLE;
+    return mDescriptor->getSet(frameIndex);
+}
+
 void VulkanModel::loadTextures(const tinygltf::Model& model) {
     for (const auto& image : model.images) {
         auto texture = std::make_unique<VulkanTexture>(mContext);

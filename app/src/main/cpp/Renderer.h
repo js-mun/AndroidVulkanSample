@@ -12,7 +12,6 @@
 #include "VulkanBuffer.h"
 #include "VulkanCommand.h"
 #include "VulkanContext.h"
-#include "VulkanDescriptor.h"
 #include "VulkanMesh.h"
 #include "VulkanModel.h"
 #include "VulkanPipeline.h"
@@ -44,7 +43,6 @@ private:
     std::unique_ptr<ShadowResources> mShadowResources;
     std::unique_ptr<VulkanSync> mSync;
     std::unique_ptr<VulkanCommand> mCommand;
-    std::unique_ptr<VulkanDescriptor> mDescriptor;
 
     std::unique_ptr<VulkanModel> mModel;
 

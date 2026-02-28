@@ -102,14 +102,12 @@ bool Renderer::initialize() {
         return false;
     }
 
-    // 모델의 텍스처 리스트를 전달합니다.
-    mDescriptor = std::make_unique<VulkanDescriptor>(mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
-    if (!mDescriptor->initialize(mMainPipeline->getDescriptorSetLayout(), 
+    if (!mModel->initializeDescriptor(mMainPipeline->getDescriptorSetLayout(),
             mUniformBuffers,
-            mModel->getTextures(), 
-            mShadowResources->getDepthView(), 
+            MAX_FRAMES_IN_FLIGHT,
+            mShadowResources->getDepthView(),
             mShadowResources->getSampler())) {
-        LOGE("Failed to initialize VulkanDescriptor");
+        LOGE("Failed to initialize model descriptor");
         return false;
     }
 
@@ -172,7 +170,7 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               mShadowPipeline->getGraphicsPipeline());
 
-            VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
+            VkDescriptorSet set = mModel ? mModel->getDescriptorSet(mCurrentFrame) : VK_NULL_HANDLE;
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     mShadowPipeline->getPipelineLayout(),
                                     0, 1, &set, 0, nullptr);
@@ -227,7 +225,7 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mMainPipeline->getGraphicsPipeline());
 
             // Descriptor Set 바인딩 (UBO 데이터 연결)
-            VkDescriptorSet set = mDescriptor->getSet(mCurrentFrame);
+            VkDescriptorSet set = mModel ? mModel->getDescriptorSet(mCurrentFrame) : VK_NULL_HANDLE;
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     mMainPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
 
@@ -273,8 +271,10 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        mDescriptor->updateShadowMap(mShadowResources->getDepthView(),
-                mShadowResources->getSampler());
+        if (mModel) {
+            mModel->updateShadowMap(mShadowResources->getDepthView(),
+                    mShadowResources->getSampler());
+        }
         return;
     }
 
@@ -296,8 +296,10 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        mDescriptor->updateShadowMap(mShadowResources->getDepthView(),
-                mShadowResources->getSampler());
+        if (mModel) {
+            mModel->updateShadowMap(mShadowResources->getDepthView(),
+                    mShadowResources->getSampler());
+        }
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         LOGE("Failed to acquire swapchain image!");
@@ -350,8 +352,10 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        mDescriptor->updateShadowMap(mShadowResources->getDepthView(),
-                mShadowResources->getSampler());
+        if (mModel) {
+            mModel->updateShadowMap(mShadowResources->getDepthView(),
+                    mShadowResources->getSampler());
+        }
     }
 
     // 다음 프레임 인덱스로 교체
