@@ -6,8 +6,8 @@
 #include <glm/glm.hpp>
 
 struct UniformBufferObject {
-    glm::mat4 mvp;
-    glm::mat4 lightMVP;
+    glm::mat4 viewProj;
+    glm::mat4 lightViewProj;
 };
 
 struct Vertex {

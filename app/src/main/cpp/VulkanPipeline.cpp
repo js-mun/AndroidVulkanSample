@@ -226,9 +226,16 @@ bool VulkanPipeline::createGraphicsPipeline(AAssetManager* assetManager) {
     dynamicStateInfo.pDynamicStates = dynamicStates.data();
 
     // 4. Pipeline Layout
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(glm::mat4);
+
     VkPipelineLayoutCreateInfo layoutInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
     layoutInfo.setLayoutCount = 1;
     layoutInfo.pSetLayouts = &mDescriptorSetLayout;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(mDevice, &layoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS) {
         vkDestroyShaderModule(mDevice, vertShader, nullptr);

@@ -5,7 +5,6 @@
 
 #include <array>
 #include <vector>
-#include <chrono>
 
 Renderer::Renderer(struct android_app *app) : mApp(app) {
 }
@@ -115,6 +114,14 @@ bool Renderer::initialize() {
             return false;
         }
         mModels.push_back(std::move(model));
+        mModelTransforms.push_back(glm::mat4(1.0f));
+    }
+
+    // 예시: 큐브를 바닥 위로 살짝 올립니다.
+    for (size_t i = 0; i < modelPaths.size(); ++i) {
+        if (modelPaths[i].find("AnimatedCube") != std::string::npos) {
+            mModelTransforms[i] = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
+        }
     }
 
     mCamera = std::make_unique<Camera>();
@@ -179,11 +186,20 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
 
             vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 
-            for (const auto& model : mModels) {
+            for (size_t i = 0; i < mModels.size(); ++i) {
+                const auto& model = mModels[i];
+                const glm::mat4& modelMatrix = mModelTransforms[i];
                 VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                         mShadowPipeline->getPipelineLayout(),
                                         0, 1, &set, 0, nullptr);
+
+                vkCmdPushConstants(commandBuffer,
+                                   mShadowPipeline->getPipelineLayout(),
+                                   VK_SHADER_STAGE_VERTEX_BIT,
+                                   0,
+                                   sizeof(glm::mat4),
+                                   &modelMatrix);
                 model->draw(commandBuffer);
             }
 
@@ -229,10 +245,19 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             scissor.extent = mSwapchain->getExtent();
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
             
-            for (const auto& model : mModels) {
+            for (size_t i = 0; i < mModels.size(); ++i) {
+                const auto& model = mModels[i];
+                const glm::mat4& modelMatrix = mModelTransforms[i];
                 VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                         mMainPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
+
+                vkCmdPushConstants(commandBuffer,
+                                   mMainPipeline->getPipelineLayout(),
+                                   VK_SHADER_STAGE_VERTEX_BIT,
+                                   0,
+                                   sizeof(glm::mat4),
+                                   &modelMatrix);
                 model->draw(commandBuffer);
             }
 
@@ -348,27 +373,16 @@ void Renderer::render() {
 }
 
 void Renderer::updateUniformBuffer(uint32_t currentImage) {
-    // 1. 앱 시작 후 경과 시간 계산
-    static auto startTime = std::chrono::steady_clock::now();
-    auto currentTime = std::chrono::steady_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(
-            currentTime - startTime).count();
-
-    // 2. 카메라 업데이트 (VP 행렬 계산)
+    // 1. 카메라 업데이트 (VP 행렬 계산)
     mCamera->update(static_cast<float>(mSwapchain->getExtent().width),
                     static_cast<float>(mSwapchain->getExtent().height),
                     mSwapchain->getTransform());
 
-    // 3. [핵심] 모델에게 현재 시간에 맞는 변환 행렬을 가져옴 -> 터치로 카메라 회전하도록 변경하여 주석처리.
-    // glm::mat4 modelMatrix = mModel->getAnimationTransform(time);
-
-    glm::mat4 modelMatrix = glm::mat4(1.0f);
-
-    // 4. 최종 MVP 조합 (VP * M)
+    // 2. 프레임 공통 UBO 작성 (모델 행렬은 push constant로 per-draw 전달)
     UniformBufferObject ubo{};
-    ubo.mvp = mCamera->getViewProjectionMatrix() * modelMatrix;
+    ubo.viewProj = mCamera->getViewProjectionMatrix();
 
-    // lightMVP 업데이트
+    // 3. 라이트 VP
     glm::mat4 lightView = glm::lookAt(
         glm::vec3(2.5f, 4.0f, 2.5f),
         glm::vec3(0.0f, 0.0f, 0.0f),
@@ -380,10 +394,9 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
                                            near_plane, far_plane);
     // lightProj[1][1] *= -1.0f; // Vulkan clip correction
 
-    ubo.lightMVP = lightProj * lightView * modelMatrix;
+    ubo.lightViewProj = lightProj * lightView;
 
-
-    // 5. GPU 전송
+    // 4. GPU 전송
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
 }
 

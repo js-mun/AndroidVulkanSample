@@ -44,6 +44,7 @@ private:
     std::unique_ptr<VulkanCommand> mCommand;
 
     std::vector<std::unique_ptr<VulkanModel>> mModels;
+    std::vector<glm::mat4> mModelTransforms;
 
     std::unique_ptr<Camera> mCamera;
 
