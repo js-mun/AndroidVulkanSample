@@ -184,7 +184,8 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             scissor.extent = mShadowResources->getExtent();
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
+            // Shadow acne 완화를 위해 shadow pipeline 설정값과 동일한 bias를 사용
+            vkCmdSetDepthBias(commandBuffer, 1.25f, 0.0f, 1.75f);
 
             for (size_t i = 0; i < mModels.size(); ++i) {
                 const auto& model = mModels[i];
@@ -383,18 +384,21 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
     ubo.viewProj = mCamera->getViewProjectionMatrix();
 
     // 3. 라이트 VP
-    glm::mat4 lightView = glm::lookAt(
-        glm::vec3(2.5f, 4.0f, 2.5f),
+    glm::mat4 lightView = glm::lookAtRH(
+        glm::vec3(4.0f, 6.0f, 4.0f),
         glm::vec3(0.0f, 0.0f, 0.0f),
         glm::vec3(0.0f, 1.0f, 0.0f));
-    float near_plane = 1.0f;  // 이 값을 조절 (너무 작으면 정밀도 하락)
-    float far_plane = 11.0f;  // 이 값을 조절 (너무 크면 정밀도 하락)
-    // 조명이 태양광(지향성 광원)이라면 ortho를 사용
-    glm::mat4 lightProj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f,
-                                           near_plane, far_plane);
-    // lightProj[1][1] *= -1.0f; // Vulkan clip correction
+
+    glm::mat4 lightProj = glm::orthoRH_ZO(
+        -8.0f, 8.0f,
+        -8.0f, 8.0f,
+        0.5f, 30.0f);
+
+    // Vulkan Y 보정
+    lightProj[1][1] *= -1.0f;
 
     ubo.lightViewProj = lightProj * lightView;
+
 
     // 4. GPU 전송
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
