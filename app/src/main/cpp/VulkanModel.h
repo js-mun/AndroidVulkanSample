@@ -14,6 +14,7 @@
 
 namespace tinygltf {
     class Model;
+    class Primitive;
 }
 
 struct AnimationData {
@@ -53,6 +54,10 @@ private:
     AnimationData mRotationAnim;
 
     void processModel(const tinygltf::Model& model); // tinygltf 모델 -> VulkanMesh 변환
+    void processNode(const tinygltf::Model& model, int nodeIndex, const glm::mat4& parentWorld);
+    void processPrimitive(const tinygltf::Model& model,
+                          const tinygltf::Primitive& primitive,
+                          const glm::mat4& worldTransform);
     void loadTextures(const tinygltf::Model& model);
     void loadAnimations(const tinygltf::Model& model);
 };

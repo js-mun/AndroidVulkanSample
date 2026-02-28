@@ -12,7 +12,6 @@
 #include "VulkanBuffer.h"
 #include "VulkanCommand.h"
 #include "VulkanContext.h"
-#include "VulkanMesh.h"
 #include "VulkanModel.h"
 #include "VulkanPipeline.h"
 #include "VulkanSwapchain.h"
@@ -54,8 +53,6 @@ private:
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
     std::vector<std::unique_ptr<VulkanBuffer>> mUniformBuffers;
-
-    std::unique_ptr<VulkanMesh> mGroundMesh;
 
 private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);

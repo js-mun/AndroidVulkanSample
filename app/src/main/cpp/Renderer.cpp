@@ -95,11 +95,15 @@ bool Renderer::initialize() {
         mUniformBuffers[i]->map();
     }
 
-    // 모델을 먼저 로드하여 텍스처를 확보한 뒤 각 모델 디스크립터를 초기화합니다.
-    {
+    // 모델들을 로드하고 각 모델 디스크립터를 초기화합니다.
+    const std::vector<std::string> modelPaths = {
+            "glTF/plane.glb",
+             "glTF/AnimatedCube/AnimatedCube.gltf",
+    };
+    for (const auto& path : modelPaths) {
         auto model = std::make_unique<VulkanModel>(mContext.get());
-        if (!model->loadFromFile(mApp->activity->assetManager, "glTF/AnimatedCube/AnimatedCube.gltf")) {
-            LOGE("Failed to load glTF model!");
+        if (!model->loadFromFile(mApp->activity->assetManager, path)) {
+            LOGE("Failed to load model: %s", path.c_str());
             return false;
         }
         if (!model->initializeDescriptor(mMainPipeline->getDescriptorSetLayout(),
@@ -107,7 +111,7 @@ bool Renderer::initialize() {
                 MAX_FRAMES_IN_FLIGHT,
                 mShadowResources->getDepthView(),
                 mShadowResources->getSampler())) {
-            LOGE("Failed to initialize model descriptor");
+            LOGE("Failed to initialize model descriptor: %s", path.c_str());
             return false;
         }
         mModels.push_back(std::move(model));
@@ -116,19 +120,6 @@ bool Renderer::initialize() {
     mCamera = std::make_unique<Camera>();
 
     mRenderGraph = std::make_unique<RenderGraph>();
-
-    // Ground plane (y = -0.5)
-    std::vector<Vertex> groundVertices = {
-        {{-5.0f, -1.5f, -5.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
-        {{ 5.0f, -1.5f, -5.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}},
-        {{ 5.0f, -1.5f,  5.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-5.0f, -1.5f,  5.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-    };
-    std::vector<uint32_t> groundIndices = {
-        0, 2, 1,
-        2, 0, 3
-    };
-    mGroundMesh = std::make_unique<VulkanMesh>(mContext.get(), groundVertices, groundIndices);
 
     LOGI("Vulkan Initialization Wrap-up Successful!");
 
@@ -188,14 +179,6 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
 
             vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 
-            // Ground는 첫 모델의 디스크립터를 재사용합니다.
-            if (mGroundMesh && !mModels.empty()) {
-                VkDescriptorSet groundSet = mModels[0]->getDescriptorSet(mCurrentFrame);
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        mShadowPipeline->getPipelineLayout(),
-                                        0, 1, &groundSet, 0, nullptr);
-                mGroundMesh->draw(commandBuffer);
-            }
             for (const auto& model : mModels) {
                 VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -246,13 +229,6 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             scissor.extent = mSwapchain->getExtent();
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
             
-            // Ground는 첫 모델의 디스크립터를 재사용합니다.
-            if (mGroundMesh && !mModels.empty()) {
-                VkDescriptorSet groundSet = mModels[0]->getDescriptorSet(mCurrentFrame);
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        mMainPipeline->getPipelineLayout(), 0, 1, &groundSet, 0, nullptr);
-                mGroundMesh->draw(commandBuffer);
-            }
             for (const auto& model : mModels) {
                 VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
