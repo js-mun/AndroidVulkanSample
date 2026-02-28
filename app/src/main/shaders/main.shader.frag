@@ -13,6 +13,7 @@ layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec4 fragShadowCoord;
 layout(location = 3) in vec3 fragWorldPos;
+layout(location = 4) in vec3 fragNormal;
 
 layout(location = 0) out vec4 outColor;
 
@@ -30,10 +31,7 @@ void main() {
         return;
     }
 
-    // screen-space normal 근사
-    vec3 dx = dFdx(fragWorldPos);
-    vec3 dy = dFdy(fragWorldPos);
-    vec3 N = normalize(cross(dx, dy));
+    vec3 N = normalize(fragNormal);
 
     vec3 L = normalize(ubo.lightPos.xyz - fragWorldPos);
     float ndotl = max(dot(N, L), 0.0);
@@ -42,18 +40,8 @@ void main() {
     float bias = max(0.0006 * (1.0 - ndotl), 0.0002);
     bias = min(bias, 0.0025);
 
-    // 3x3 PCF
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
-    float shadow = 0.0;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            vec2 uv = proj.xy + vec2(float(x), float(y)) * texelSize;
-            float pcfDepth = texture(shadowMap, uv).r;
-            shadow += (currentDepth - bias > pcfDepth) ? 1.0 : 0.0;
-        }
-    }
-    shadow /= 9.0;
-
+    float shadowDepth = texture(shadowMap, proj.xy).r;
+    float shadow = (currentDepth - bias > shadowDepth) ? 1.0 : 0.0;
     float visibility = mix(1.0, 0.45, shadow);
     outColor = vec4(base.rgb * visibility, base.a);
 }

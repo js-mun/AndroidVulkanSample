@@ -22,43 +22,53 @@ void logNodeRecursive(const tinygltf::Model& model, int nodeIndex, int depth) {
     const auto& node = model.nodes[nodeIndex];
     std::string indent(static_cast<size_t>(depth) * 2, ' ');
 
-    LOGI("[glTF] %sNode[%d] name='%s' mesh=%d children=%zu matrixSize=%zu",
-         indent.c_str(),
-         nodeIndex,
-         node.name.c_str(),
-         node.mesh,
-         node.children.size(),
-         node.matrix.size());
+    if (DEBUG_LOG) {
+        LOGI("[glTF] %sNode[%d] name='%s' mesh=%d children=%zu matrixSize=%zu",
+                indent.c_str(),
+                nodeIndex,
+                node.name.c_str(),
+                node.mesh,
+                node.children.size(),
+                node.matrix.size());
+    }
 
     if (!node.translation.empty()) {
-        LOGI("[glTF] %s  translation=(%.3f, %.3f, %.3f)",
-             indent.c_str(),
-             static_cast<float>(node.translation[0]),
-             static_cast<float>(node.translation[1]),
-             static_cast<float>(node.translation[2]));
+        if (DEBUG_LOG) {
+            LOGI("[glTF] %s  translation=(%.3f, %.3f, %.3f)",
+                indent.c_str(),
+                static_cast<float>(node.translation[0]),
+                static_cast<float>(node.translation[1]),
+                static_cast<float>(node.translation[2]));
+        }
     }
     if (!node.rotation.empty()) {
-        LOGI("[glTF] %s  rotation(quat xyzw)=(%.3f, %.3f, %.3f, %.3f)",
-             indent.c_str(),
-             static_cast<float>(node.rotation[0]),
-             static_cast<float>(node.rotation[1]),
-             static_cast<float>(node.rotation[2]),
-             static_cast<float>(node.rotation[3]));
+        if (DEBUG_LOG) {
+            LOGI("[glTF] %s  rotation(quat xyzw)=(%.3f, %.3f, %.3f, %.3f)",
+                indent.c_str(),
+                static_cast<float>(node.rotation[0]),
+                static_cast<float>(node.rotation[1]),
+                static_cast<float>(node.rotation[2]),
+                static_cast<float>(node.rotation[3]));
+        }
     }
     if (!node.scale.empty()) {
-        LOGI("[glTF] %s  scale=(%.3f, %.3f, %.3f)",
-             indent.c_str(),
-             static_cast<float>(node.scale[0]),
-             static_cast<float>(node.scale[1]),
-             static_cast<float>(node.scale[2]));
+        if (DEBUG_LOG) {
+            LOGI("[glTF] %s  scale=(%.3f, %.3f, %.3f)",
+                indent.c_str(),
+                static_cast<float>(node.scale[0]),
+                static_cast<float>(node.scale[1]),
+                static_cast<float>(node.scale[2]));
+        }
     }
     if (!node.matrix.empty()) {
-        LOGI("[glTF] %s  matrix[0..3]=(%.3f, %.3f, %.3f, %.3f)",
-             indent.c_str(),
-             static_cast<float>(node.matrix[0]),
-             static_cast<float>(node.matrix[1]),
-             static_cast<float>(node.matrix[2]),
-             static_cast<float>(node.matrix[3]));
+        if (DEBUG_LOG) {
+            LOGI("[glTF] %s  matrix[0..3]=(%.3f, %.3f, %.3f, %.3f)",
+                indent.c_str(),
+                static_cast<float>(node.matrix[0]),
+                static_cast<float>(node.matrix[1]),
+                static_cast<float>(node.matrix[2]),
+                static_cast<float>(node.matrix[3]));
+        }
     }
 
     for (int childIndex : node.children) {
@@ -248,7 +258,10 @@ void VulkanModel::loadTextures(const tinygltf::Model& model) {
         // tinygltf는 이미지를 로드하여 image.image(vector<unsigned char>)에 담아둡니다.
         if (texture->loadFromMemory(image.image.data(), image.width, image.height, VK_FORMAT_R8G8B8A8_SRGB)) {
             mTextures.push_back(std::move(texture));
-            LOGI("Loaded glTF texture: %s (%dx%d)", image.name.c_str(), image.width, image.height);
+            if (DEBUG_LOG) {
+                LOGI("Loaded glTF texture: %s (%dx%d)", image.name.c_str(), 
+                        image.width, image.height);
+            }
         }
     }
 
@@ -259,7 +272,7 @@ void VulkanModel::loadTextures(const tinygltf::Model& model) {
         auto fallback = std::make_unique<VulkanTexture>(mContext);
         if (fallback->loadFromMemory(kWhitePixel.data(), 1, 1, VK_FORMAT_R8G8B8A8_SRGB)) {
             mTextures.push_back(std::move(fallback));
-            LOGI("Created fallback white texture for non-textured model");
+            if (DEBUG_LOG) LOGI("Created fallback white texture for non-textured model");
         } else {
             LOGE("Failed to create fallback white texture");
         }
@@ -334,6 +347,7 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
     const tinygltf::BufferView& posView = model.bufferViews[posAccessor.bufferView];
     const tinygltf::Buffer& posBuffer = model.buffers[posView.buffer];
     const float* positions = reinterpret_cast<const float*>(&posBuffer.data[posView.byteOffset + posAccessor.byteOffset]);
+    const glm::mat3 nodeNormalMat = glm::mat3(glm::transpose(glm::inverse(worldTransform)));
 
     vertices.resize(posAccessor.count);
     for (size_t i = 0; i < posAccessor.count; i++) {
@@ -342,6 +356,7 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
         vertices[i].pos = glm::vec3(worldPos4);
         vertices[i].color = baseColorFactor; // material baseColor 기본값
         vertices[i].texCoord = glm::vec2(0.0f, 0.0f); // UV 초기화
+        vertices[i].normal = glm::normalize(nodeNormalMat * glm::vec3(0.0f, 1.0f, 0.0f)); // NORMAL 없을 때 기본값
     }
 
     // 1.1 COLOR_0 추출 (존재하는 경우에만)
@@ -382,10 +397,24 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
             // glTF는 VEC3/VEC4 + 다양한 componentType을 허용합니다.
             vertices[i].color = readNormalizedColor(src, colorAccessor.componentType, componentCount) * baseColorFactor;
         }
-        LOGI("Extracted COLOR_0 data for %zu vertices", colorAccessor.count);
+        if (DEBUG_LOG) LOGI("Extracted COLOR_0 data for %zu vertices", colorAccessor.count);
     }
 
-    // 1.2 TEXCOORD_0 추출
+    // 1.2 NORMAL 추출
+    if (primitive.attributes.find("NORMAL") != primitive.attributes.end()) {
+        const tinygltf::Accessor& normalAccessor = model.accessors[primitive.attributes.at("NORMAL")];
+        const tinygltf::BufferView& normalView = model.bufferViews[normalAccessor.bufferView];
+        const tinygltf::Buffer& normalBuffer = model.buffers[normalView.buffer];
+        const unsigned char* normalData = &normalBuffer.data[normalView.byteOffset + normalAccessor.byteOffset];
+        int stride = normalAccessor.ByteStride(normalView);
+        for (size_t i = 0; i < normalAccessor.count; i++) {
+            const float* n = reinterpret_cast<const float*>(normalData + i * stride);
+            vertices[i].normal = glm::normalize(nodeNormalMat * glm::vec3(n[0], n[1], n[2]));
+        }
+        if (DEBUG_LOG) LOGI("Extracted NORMAL data for %zu vertices", normalAccessor.count);
+    }
+
+    // 1.3 TEXCOORD_0 추출
     if (primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end()) {
         const tinygltf::Accessor& uvAccessor = model.accessors[primitive.attributes.at("TEXCOORD_0")];
         const tinygltf::BufferView& uvView = model.bufferViews[uvAccessor.bufferView];
@@ -396,7 +425,7 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
             const float* uvs = reinterpret_cast<const float*>(uvData + i * stride);
             vertices[i].texCoord = glm::vec2(uvs[0], uvs[1]);
         }
-        LOGI("Extracted TEXCOORD_0 data for %zu vertices", uvAccessor.count);
+        if (DEBUG_LOG) LOGI("Extracted TEXCOORD_0 data for %zu vertices", uvAccessor.count);
     }
 
     // 2. INDICES 추출
@@ -423,18 +452,21 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
     mMeshes.push_back(std::make_unique<VulkanMesh>(mContext, vertices, indices));
 
     // Debugging: transformed vertex 확인
-    LOGV("Mesh Primitive: Vertex Count = %zu, Index Count = %zu", vertices.size(), indices.size());
-    if (!vertices.empty()) {
-        LOGI("[glTF] transformed v0=(%.3f, %.3f, %.3f)",
-             vertices[0].pos.x, vertices[0].pos.y, vertices[0].pos.z);
-    }
+    if (DEBUG_LOG) {
+        LOGV("Mesh Primitive: Vertex Count = %zu, Index Count = %zu", vertices.size(), indices.size());
+        if (!vertices.empty()) {
+            LOGI("[glTF] transformed v0=(%.3f, %.3f, %.3f)",
+                vertices[0].pos.x, vertices[0].pos.y, vertices[0].pos.z);
+        }
     for (size_t i = 0; i < std::min(vertices.size(), size_t(10)); ++i) {
-        LOGV("  Vertex[%zu]: pos(%.2f, %.2f, %.2f), color(%.2f, %.2f, %.2f), uv(%.2f, %.2f)",
+        LOGV("  Vertex[%zu]: pos(%.2f, %.2f, %.2f), color(%.2f, %.2f, %.2f), uv(%.2f, %.2f), n(%.2f, %.2f, %.2f)",
              i,
              vertices[i].pos.x, vertices[i].pos.y, vertices[i].pos.z,
              vertices[i].color.r, vertices[i].color.g, vertices[i].color.b,
-             vertices[i].texCoord.x, vertices[i].texCoord.y);
+             vertices[i].texCoord.x, vertices[i].texCoord.y,
+             vertices[i].normal.x, vertices[i].normal.y, vertices[i].normal.z);
     }
+}
 }
 
 void VulkanModel::draw(VkCommandBuffer commandBuffer) {
