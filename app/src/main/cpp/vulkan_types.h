@@ -8,6 +8,7 @@
 struct UniformBufferObject {
     glm::mat4 viewProj;
     glm::mat4 lightViewProj;
+    glm::vec4 lightPos; // xyz: world-space light position, w: reserved
 };
 
 struct Vertex {

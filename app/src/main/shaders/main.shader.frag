@@ -1,5 +1,11 @@
 #version 450
 
+layout(binding = 0) uniform UniformBufferObject {
+    mat4 viewProj;
+    mat4 lightViewProj;
+    vec4 lightPos;
+} ubo;
+
 layout(binding = 1) uniform sampler2D texSampler;
 layout(binding = 2) uniform sampler2D shadowMap;
 
@@ -29,9 +35,7 @@ void main() {
     vec3 dy = dFdy(fragWorldPos);
     vec3 N = normalize(cross(dx, dy));
 
-    // Renderer.cpp lightView eye와 동일하게 유지
-    vec3 lightPos = vec3(2.5, 4.0, 2.5);
-    vec3 L = normalize(lightPos - fragWorldPos);
+    vec3 L = normalize(ubo.lightPos.xyz - fragWorldPos);
     float ndotl = max(dot(N, L), 0.0);
 
     // 각도 기반 bias

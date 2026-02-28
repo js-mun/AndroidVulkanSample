@@ -196,17 +196,20 @@ bool VulkanModel::loadFromFile(AAssetManager* assetManager, const std::string& f
     LOGI("Successfully loaded glTF model: %s", filename.c_str());
 
     // Node/scene transform 정보 로깅: 실제 월드 변환(TRS/matrix) 확인용
-    LOGI("[glTF] scenes=%zu defaultScene=%d nodes=%zu meshes=%zu materials=%zu",
-         model.scenes.size(), model.defaultScene, model.nodes.size(),
-         model.meshes.size(), model.materials.size());
-
+    if (DEBUG_LOG) {
+        LOGI("[glTF] scenes=%zu defaultScene=%d nodes=%zu meshes=%zu materials=%zu",
+            model.scenes.size(), model.defaultScene, model.nodes.size(),
+            model.meshes.size(), model.materials.size());
+    }
     int sceneIndex = model.defaultScene;
     if (sceneIndex < 0 && !model.scenes.empty()) {
         sceneIndex = 0;
     }
     if (sceneIndex >= 0 && static_cast<size_t>(sceneIndex) < model.scenes.size()) {
         const auto& scene = model.scenes[sceneIndex];
-        LOGI("[glTF] Scene[%d] rootNodes=%zu", sceneIndex, scene.nodes.size());
+        if (DEBUG_LOG) {
+            LOGI("[glTF] Scene[%d] rootNodes=%zu", sceneIndex, scene.nodes.size());
+        }
         for (int rootNode : scene.nodes) {
             logNodeRecursive(model, rootNode, 0);
         }
@@ -348,10 +351,36 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
         const tinygltf::Buffer& colorBuffer = model.buffers[colorView.buffer];
         const unsigned char* colorData = &colorBuffer.data[colorView.byteOffset + colorAccessor.byteOffset];
         int stride = colorAccessor.ByteStride(colorView);
+        const int componentCount = (colorAccessor.type == TINYGLTF_TYPE_VEC4) ? 4 : 3;
+
+        auto readNormalizedColor = [&](const unsigned char* src, int componentType, int count) -> glm::vec3 {
+            glm::vec3 color(1.0f);
+            if (componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
+                const float* v = reinterpret_cast<const float*>(src);
+                color.r = (count > 0) ? v[0] : 1.0f;
+                color.g = (count > 1) ? v[1] : 1.0f;
+                color.b = (count > 2) ? v[2] : 1.0f;
+            } else if (componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+                const uint8_t* v = reinterpret_cast<const uint8_t*>(src);
+                color.r = (count > 0) ? static_cast<float>(v[0]) / 255.0f : 1.0f;
+                color.g = (count > 1) ? static_cast<float>(v[1]) / 255.0f : 1.0f;
+                color.b = (count > 2) ? static_cast<float>(v[2]) / 255.0f : 1.0f;
+            } else if (componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+                const uint16_t* v = reinterpret_cast<const uint16_t*>(src);
+                color.r = (count > 0) ? static_cast<float>(v[0]) / 65535.0f : 1.0f;
+                color.g = (count > 1) ? static_cast<float>(v[1]) / 65535.0f : 1.0f;
+                color.b = (count > 2) ? static_cast<float>(v[2]) / 65535.0f : 1.0f;
+            } else {
+                // 지원하지 않는 타입이면 기본 흰색 유지
+                LOGW("Unsupported COLOR_0 componentType: %d", componentType);
+            }
+            return color;
+        };
+
         for (size_t i = 0; i < colorAccessor.count; i++) {
-            const float* rgba = reinterpret_cast<const float*>(colorData + i * stride);
-            // glTF는 VEC3 또는 VEC4 색상을 가질 수 있습니다.
-            vertices[i].color = glm::vec3(rgba[0], rgba[1], rgba[2]) * baseColorFactor;
+            const unsigned char* src = colorData + i * stride;
+            // glTF는 VEC3/VEC4 + 다양한 componentType을 허용합니다.
+            vertices[i].color = readNormalizedColor(src, colorAccessor.componentType, componentCount) * baseColorFactor;
         }
         LOGI("Extracted COLOR_0 data for %zu vertices", colorAccessor.count);
     }

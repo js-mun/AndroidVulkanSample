@@ -72,7 +72,7 @@ bool ShadowResources::initialize(VkRenderPass shadowRenderPass, VkFormat depthFo
     samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
-    samplerInfo.compareEnable = VK_TRUE;
+    samplerInfo.compareEnable = VK_FALSE;
     samplerInfo.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;

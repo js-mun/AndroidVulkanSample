@@ -382,10 +382,11 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
     // 2. 프레임 공통 UBO 작성 (모델 행렬은 push constant로 per-draw 전달)
     UniformBufferObject ubo{};
     ubo.viewProj = mCamera->getViewProjectionMatrix();
+    ubo.lightPos = glm::vec4(4.0f, 6.0f, 4.0f, 1.0f);
 
     // 3. 라이트 VP
     glm::mat4 lightView = glm::lookAtRH(
-        glm::vec3(4.0f, 6.0f, 4.0f),
+        glm::vec3(ubo.lightPos),
         glm::vec3(0.0f, 0.0f, 0.0f),
         glm::vec3(0.0f, 1.0f, 0.0f));
 
