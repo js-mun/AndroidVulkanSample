@@ -44,7 +44,7 @@ private:
     std::unique_ptr<VulkanSync> mSync;
     std::unique_ptr<VulkanCommand> mCommand;
 
-    std::unique_ptr<VulkanModel> mModel;
+    std::vector<std::unique_ptr<VulkanModel>> mModels;
 
     std::unique_ptr<Camera> mCamera;
 

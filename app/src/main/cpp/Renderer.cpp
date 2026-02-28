@@ -95,20 +95,22 @@ bool Renderer::initialize() {
         mUniformBuffers[i]->map();
     }
 
-    // 모델을 먼저 로드하여 텍스처를 확보한 뒤 디스크립터를 초기화합니다.
-    mModel = std::make_unique<VulkanModel>(mContext.get());
-    if (!mModel->loadFromFile(mApp->activity->assetManager, "glTF/AnimatedCube/AnimatedCube.gltf")) {
-        LOGE("Failed to load glTF model!");
-        return false;
-    }
-
-    if (!mModel->initializeDescriptor(mMainPipeline->getDescriptorSetLayout(),
-            mUniformBuffers,
-            MAX_FRAMES_IN_FLIGHT,
-            mShadowResources->getDepthView(),
-            mShadowResources->getSampler())) {
-        LOGE("Failed to initialize model descriptor");
-        return false;
+    // 모델을 먼저 로드하여 텍스처를 확보한 뒤 각 모델 디스크립터를 초기화합니다.
+    {
+        auto model = std::make_unique<VulkanModel>(mContext.get());
+        if (!model->loadFromFile(mApp->activity->assetManager, "glTF/AnimatedCube/AnimatedCube.gltf")) {
+            LOGE("Failed to load glTF model!");
+            return false;
+        }
+        if (!model->initializeDescriptor(mMainPipeline->getDescriptorSetLayout(),
+                mUniformBuffers,
+                MAX_FRAMES_IN_FLIGHT,
+                mShadowResources->getDepthView(),
+                mShadowResources->getSampler())) {
+            LOGE("Failed to initialize model descriptor");
+            return false;
+        }
+        mModels.push_back(std::move(model));
     }
 
     mCamera = std::make_unique<Camera>();
@@ -170,11 +172,6 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               mShadowPipeline->getGraphicsPipeline());
 
-            VkDescriptorSet set = mModel ? mModel->getDescriptorSet(mCurrentFrame) : VK_NULL_HANDLE;
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    mShadowPipeline->getPipelineLayout(),
-                                    0, 1, &set, 0, nullptr);
-
             VkViewport viewport{};
             viewport.x = 0.0f;
             viewport.y = 0.0f;
@@ -191,11 +188,20 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
 
             vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 
-            if (mGroundMesh) {
+            // Ground는 첫 모델의 디스크립터를 재사용합니다.
+            if (mGroundMesh && !mModels.empty()) {
+                VkDescriptorSet groundSet = mModels[0]->getDescriptorSet(mCurrentFrame);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        mShadowPipeline->getPipelineLayout(),
+                                        0, 1, &groundSet, 0, nullptr);
                 mGroundMesh->draw(commandBuffer);
             }
-            if (mModel) {
-                mModel->draw(commandBuffer);
+            for (const auto& model : mModels) {
+                VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        mShadowPipeline->getPipelineLayout(),
+                                        0, 1, &set, 0, nullptr);
+                model->draw(commandBuffer);
             }
 
             vkCmdEndRenderPass(commandBuffer);
@@ -225,10 +231,6 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mMainPipeline->getGraphicsPipeline());
 
             // Descriptor Set 바인딩 (UBO 데이터 연결)
-            VkDescriptorSet set = mModel ? mModel->getDescriptorSet(mCurrentFrame) : VK_NULL_HANDLE;
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    mMainPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
-
             // Dynamic State이므로 렌더링 시점에 뷰포트/시저 설정 필요
             VkViewport viewport{};
             viewport.x = 0.0f;
@@ -244,11 +246,18 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
             scissor.extent = mSwapchain->getExtent();
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
             
-            if (mGroundMesh) {
+            // Ground는 첫 모델의 디스크립터를 재사용합니다.
+            if (mGroundMesh && !mModels.empty()) {
+                VkDescriptorSet groundSet = mModels[0]->getDescriptorSet(mCurrentFrame);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        mMainPipeline->getPipelineLayout(), 0, 1, &groundSet, 0, nullptr);
                 mGroundMesh->draw(commandBuffer);
             }
-            if (mModel) {
-                mModel->draw(commandBuffer);
+            for (const auto& model : mModels) {
+                VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        mMainPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
+                model->draw(commandBuffer);
             }
 
             vkCmdEndRenderPass(commandBuffer);
@@ -271,8 +280,8 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        if (mModel) {
-            mModel->updateShadowMap(mShadowResources->getDepthView(),
+        for (auto& model : mModels) {
+            model->updateShadowMap(mShadowResources->getDepthView(),
                     mShadowResources->getSampler());
         }
         return;
@@ -296,8 +305,8 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        if (mModel) {
-            mModel->updateShadowMap(mShadowResources->getDepthView(),
+        for (auto& model : mModels) {
+            model->updateShadowMap(mShadowResources->getDepthView(),
                     mShadowResources->getSampler());
         }
         return;
@@ -352,8 +361,8 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        if (mModel) {
-            mModel->updateShadowMap(mShadowResources->getDepthView(),
+        for (auto& model : mModels) {
+            model->updateShadowMap(mShadowResources->getDepthView(),
                     mShadowResources->getSampler());
         }
     }
