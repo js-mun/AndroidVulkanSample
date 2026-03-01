@@ -1,8 +1,8 @@
 #include "GlobalDescriptor.h"
 #include "vulkan_types.h"
 
-GlobalDescriptor::GlobalDescriptor(VkDevice device, uint32_t maxFramesInFlight)
-    : mDevice(device), mMaxFramesInFlight(maxFramesInFlight) {}
+GlobalDescriptor::GlobalDescriptor(VkDevice device, uint32_t maxFramesInFlight, bool includeShadowBinding)
+    : mDevice(device), mMaxFramesInFlight(maxFramesInFlight), mIncludeShadowBinding(includeShadowBinding) {}
 
 GlobalDescriptor::~GlobalDescriptor() {
     if (mDescriptorPool != VK_NULL_HANDLE) {
@@ -16,11 +16,15 @@ bool GlobalDescriptor::initialize(VkDescriptorSetLayout globalLayout,
     VkDescriptorPoolSize poolSizes[2]{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = mMaxFramesInFlight;
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = mMaxFramesInFlight;
+    uint32_t poolSizeCount = 1;
+    if (mIncludeShadowBinding) {
+        poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[1].descriptorCount = mMaxFramesInFlight;
+        poolSizeCount = 2;
+    }
 
     VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-    poolInfo.poolSizeCount = 2;
+    poolInfo.poolSizeCount = poolSizeCount;
     poolInfo.pPoolSizes = poolSizes;
     poolInfo.maxSets = mMaxFramesInFlight;
 
@@ -45,11 +49,6 @@ bool GlobalDescriptor::initialize(VkDescriptorSetLayout globalLayout,
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
 
-        VkDescriptorImageInfo shadowInfo{};
-        shadowInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        shadowInfo.imageView = shadowView;
-        shadowInfo.sampler = shadowSampler;
-
         VkWriteDescriptorSet writes[2]{};
 
         writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -59,20 +58,32 @@ bool GlobalDescriptor::initialize(VkDescriptorSetLayout globalLayout,
         writes[0].descriptorCount = 1;
         writes[0].pBufferInfo = &bufferInfo;
 
-        writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        writes[1].dstSet = mDescriptorSets[i];
-        writes[1].dstBinding = 2; // Shadow map
-        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writes[1].descriptorCount = 1;
-        writes[1].pImageInfo = &shadowInfo;
+        uint32_t writeCount = 1;
+        VkDescriptorImageInfo shadowInfo{};
+        if (mIncludeShadowBinding) {
+            shadowInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            shadowInfo.imageView = shadowView;
+            shadowInfo.sampler = shadowSampler;
 
-        vkUpdateDescriptorSets(mDevice, 2, writes, 0, nullptr);
+            writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+            writes[1].dstSet = mDescriptorSets[i];
+            writes[1].dstBinding = 2; // Shadow map
+            writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[1].descriptorCount = 1;
+            writes[1].pImageInfo = &shadowInfo;
+            writeCount = 2;
+        }
+
+        vkUpdateDescriptorSets(mDevice, writeCount, writes, 0, nullptr);
     }
 
     return true;
 }
 
 void GlobalDescriptor::updateShadowMap(VkImageView shadowView, VkSampler shadowSampler) {
+    if (!mIncludeShadowBinding) {
+        return;
+    }
     for (uint32_t i = 0; i < mMaxFramesInFlight; ++i) {
         VkDescriptorImageInfo shadowInfo{};
         shadowInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;

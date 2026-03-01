@@ -41,12 +41,13 @@ bool Renderer::initialize() {
     mainConfig.cullMode = VK_CULL_MODE_BACK_BIT;
     mainConfig.depthBiasConstant = 0.0f;
     mainConfig.depthBiasSlope = 0.0f;
+    mainConfig.setProfile = PipelineConfig::SetProfile::Main;
 
     mMainPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
     if (!mMainPipeline->initialize(mSwapchain->getImageFormat(), mSwapchain->getDepthFormat(),
                                mApp->activity->assetManager,
-                               mDescriptorLayouts->getGlobalSetLayout(),
-                               mDescriptorLayouts->getMaterialSetLayout(),
+                               mDescriptorLayouts->getMainGlobalSetLayout(),
+                               mDescriptorLayouts->getMainMaterialSetLayout(),
                                mainConfig)) {
         LOGE("Failed to initialize Vulkan Pipeline");
         return false;
@@ -63,12 +64,13 @@ bool Renderer::initialize() {
     shadowConfig.cullMode = VK_CULL_MODE_BACK_BIT;
     shadowConfig.depthBiasConstant = 1.25f;
     shadowConfig.depthBiasSlope = 1.75f;
+    shadowConfig.setProfile = PipelineConfig::SetProfile::Shadow;
 
     mShadowPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
     if (!mShadowPipeline->initialize(mSwapchain->getImageFormat(), 
             mSwapchain->getDepthFormat(), mApp->activity->assetManager,
-            mDescriptorLayouts->getGlobalSetLayout(),
-            mDescriptorLayouts->getMaterialSetLayout(),
+            mDescriptorLayouts->getShadowGlobalSetLayout(),
+            VK_NULL_HANDLE,
             shadowConfig)) {
         LOGE("Failed to initialize Vulkan Pipeline");
         return false;
@@ -106,14 +108,25 @@ bool Renderer::initialize() {
         mUniformBuffers[i]->map();
     }
 
-    mGlobalDescriptor = std::make_unique<GlobalDescriptor>(
-            mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
-    if (!mGlobalDescriptor->initialize(
-            mDescriptorLayouts->getGlobalSetLayout(),
+    mMainGlobalDescriptor = std::make_unique<GlobalDescriptor>(
+            mContext->getDevice(), MAX_FRAMES_IN_FLIGHT, true);
+    if (!mMainGlobalDescriptor->initialize(
+            mDescriptorLayouts->getMainGlobalSetLayout(),
             mUniformBuffers,
             mShadowResources->getDepthView(),
             mShadowResources->getSampler())) {
-        LOGE("Failed to initialize global descriptor");
+        LOGE("Failed to initialize main global descriptor");
+        return false;
+    }
+
+    mShadowGlobalDescriptor = std::make_unique<GlobalDescriptor>(
+            mContext->getDevice(), MAX_FRAMES_IN_FLIGHT, false);
+    if (!mShadowGlobalDescriptor->initialize(
+            mDescriptorLayouts->getShadowGlobalSetLayout(),
+            mUniformBuffers,
+            VK_NULL_HANDLE,
+            VK_NULL_HANDLE)) {
+        LOGE("Failed to initialize shadow global descriptor");
         return false;
     }
 
@@ -128,7 +141,7 @@ bool Renderer::initialize() {
             LOGE("Failed to load model: %s", path.c_str());
             return false;
         }
-        if (!model->initializeDescriptor(mDescriptorLayouts->getMaterialSetLayout(),
+        if (!model->initializeDescriptor(mDescriptorLayouts->getMainMaterialSetLayout(),
                 MAX_FRAMES_IN_FLIGHT)) {
             LOGE("Failed to initialize model descriptor: %s", path.c_str());
             return false;
@@ -211,7 +224,7 @@ void Renderer::buildFrameGraph() {
             // Shadow acne 완화를 위해 shadow pipeline 설정값과 동일한 bias를 사용
             vkCmdSetDepthBias(commandBuffer, 1.25f, 0.0f, 1.75f);
 
-            VkDescriptorSet globalSet = mGlobalDescriptor->getSet(mCurrentFrame);
+            VkDescriptorSet globalSet = mShadowGlobalDescriptor->getSet(mCurrentFrame);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     mShadowPipeline->getPipelineLayout(),
                                     0, 1, &globalSet, 0, nullptr);
@@ -270,7 +283,7 @@ void Renderer::buildFrameGraph() {
             scissor.extent = mSwapchain->getExtent();
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            VkDescriptorSet globalSet = mGlobalDescriptor->getSet(mCurrentFrame);
+            VkDescriptorSet globalSet = mMainGlobalDescriptor->getSet(mCurrentFrame);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     mMainPipeline->getPipelineLayout(),
                                     0, 1, &globalSet, 0, nullptr);
@@ -314,7 +327,7 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        mGlobalDescriptor->updateShadowMap(
+        mMainGlobalDescriptor->updateShadowMap(
                 mShadowResources->getDepthView(),
                 mShadowResources->getSampler());
         mFrameGraphReady = false;
@@ -339,7 +352,7 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        mGlobalDescriptor->updateShadowMap(
+        mMainGlobalDescriptor->updateShadowMap(
                 mShadowResources->getDepthView(),
                 mShadowResources->getSampler());
         mFrameGraphReady = false;
@@ -395,7 +408,7 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        mGlobalDescriptor->updateShadowMap(
+        mMainGlobalDescriptor->updateShadowMap(
                 mShadowResources->getDepthView(),
                 mShadowResources->getSampler());
         mFrameGraphReady = false;

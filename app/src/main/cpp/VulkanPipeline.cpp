@@ -43,6 +43,15 @@ bool VulkanPipeline::initialize(VkFormat swapchainImageFormat, VkFormat depthFor
     mConfig = config;
     mGlobalSetLayout = globalSetLayout;
     mMaterialSetLayout = materialSetLayout;
+    if (mGlobalSetLayout == VK_NULL_HANDLE) {
+        LOGE("Global descriptor set layout must not be null");
+        return false;
+    }
+    if (mConfig.setProfile == PipelineConfig::SetProfile::Main &&
+            mMaterialSetLayout == VK_NULL_HANDLE) {
+        LOGE("Main pipeline requires material descriptor set layout");
+        return false;
+    }
     if (!createRenderPass(swapchainImageFormat, depthFormat)) return false;
     if (!createGraphicsPipeline(assetManager)) return false;
     return true;
@@ -212,13 +221,19 @@ bool VulkanPipeline::createGraphicsPipeline(AAssetManager* assetManager) {
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(glm::mat4);
 
-    VkDescriptorSetLayout setLayouts[] = {
+    VkDescriptorSetLayout mainSetLayouts[] = {
         mGlobalSetLayout,   // set = 0
         mMaterialSetLayout  // set = 1
     };
+
     VkPipelineLayoutCreateInfo layoutInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-    layoutInfo.setLayoutCount = 2;
-    layoutInfo.pSetLayouts = setLayouts;
+    if (mConfig.setProfile == PipelineConfig::SetProfile::Shadow) {
+        layoutInfo.setLayoutCount = 1;
+        layoutInfo.pSetLayouts = &mGlobalSetLayout; // set = 0 only
+    } else {
+        layoutInfo.setLayoutCount = 2;
+        layoutInfo.pSetLayouts = mainSetLayouts;
+    }
     layoutInfo.pushConstantRangeCount = 1;
     layoutInfo.pPushConstantRanges = &pushConstantRange;
 

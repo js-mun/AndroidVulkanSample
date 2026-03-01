@@ -12,12 +12,13 @@ public:
 
     bool initialize();
 
-    VkDescriptorSetLayout getGlobalSetLayout() const { return mGlobalSetLayout; }     // set = 0
-    VkDescriptorSetLayout getMaterialSetLayout() const { return mMaterialSetLayout; } // set = 1
+    VkDescriptorSetLayout getMainGlobalSetLayout() const { return mMainGlobalSetLayout; }   // set = 0 (main)
+    VkDescriptorSetLayout getMainMaterialSetLayout() const { return mMainMaterialSetLayout; } // set = 1 (main)
+    VkDescriptorSetLayout getShadowGlobalSetLayout() const { return mShadowGlobalSetLayout; } // set = 0 (shadow)
 
 private:
     VkDevice mDevice;
-    VkDescriptorSetLayout mGlobalSetLayout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout mMaterialSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout mMainGlobalSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout mMainMaterialSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout mShadowGlobalSetLayout = VK_NULL_HANDLE;
 };
-

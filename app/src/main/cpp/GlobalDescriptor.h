@@ -7,7 +7,7 @@
 
 class GlobalDescriptor {
 public:
-    GlobalDescriptor(VkDevice device, uint32_t maxFramesInFlight);
+    GlobalDescriptor(VkDevice device, uint32_t maxFramesInFlight, bool includeShadowBinding);
     ~GlobalDescriptor();
 
     bool initialize(VkDescriptorSetLayout globalLayout,
@@ -21,6 +21,7 @@ public:
 private:
     VkDevice mDevice;
     uint32_t mMaxFramesInFlight;
+    bool mIncludeShadowBinding;
     VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> mDescriptorSets;
 };

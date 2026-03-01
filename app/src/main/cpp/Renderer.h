@@ -59,7 +59,8 @@ private:
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
     std::vector<std::unique_ptr<VulkanBuffer>> mUniformBuffers;
-    std::unique_ptr<GlobalDescriptor> mGlobalDescriptor;
+    std::unique_ptr<GlobalDescriptor> mMainGlobalDescriptor;
+    std::unique_ptr<GlobalDescriptor> mShadowGlobalDescriptor;
 
 private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);

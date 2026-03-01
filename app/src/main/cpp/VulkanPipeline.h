@@ -8,12 +8,18 @@
 #include <cstdint>
 
 struct PipelineConfig {
+    enum class SetProfile {
+        Main,
+        Shadow
+    };
+
     std::string vertShaderPath;
     std::string fragShaderPath;
     bool depthOnly = false;         // Shadow용 (Color 출력 없음)
     VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT;
     float depthBiasConstant = 0.0f; // Shadow Acne 방지용
     float depthBiasSlope = 0.0f;
+    SetProfile setProfile = SetProfile::Main;
 };
 
 class VulkanPipeline {
