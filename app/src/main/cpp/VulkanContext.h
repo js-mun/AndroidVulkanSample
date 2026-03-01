@@ -2,14 +2,14 @@
 
 #include "volk.h"
 #include "vk_mem_alloc.h"
+#include "ISurfaceProvider.h"
 
-#include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <string>
 #include <vector>
 
 class VulkanContext {
 public:
-    explicit VulkanContext(struct android_app* app);
+    explicit VulkanContext(ISurfaceProvider& surfaceProvider);
     ~VulkanContext();
 
     // Disable copying
@@ -43,7 +43,7 @@ public:
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
 private:
-    struct android_app* mApp;
+    ISurfaceProvider& mSurfaceProvider;
 
     VkInstance mInstance = VK_NULL_HANDLE;
     VkSurfaceKHR mSurface = VK_NULL_HANDLE;

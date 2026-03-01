@@ -37,7 +37,7 @@ VulkanPipeline::~VulkanPipeline() {
 }
 
 bool VulkanPipeline::initialize(VkFormat swapchainImageFormat, VkFormat depthFormat,
-                                const AssetProvider& assetProvider,
+                                const IAssetProvider& assetProvider,
                                 VkDescriptorSetLayout globalSetLayout,
                                 VkDescriptorSetLayout materialSetLayout,
                                 const PipelineConfig& config) {
@@ -137,7 +137,7 @@ bool VulkanPipeline::createRenderPass(VkFormat imageFormat, VkFormat depthFormat
     return true;
 }
 
-bool VulkanPipeline::createGraphicsPipeline(const AssetProvider& assetProvider) {
+bool VulkanPipeline::createGraphicsPipeline(const IAssetProvider& assetProvider) {
     auto loadSpirv = [&assetProvider](const std::string& path, std::vector<uint32_t>& outWords) -> bool {
         std::vector<uint8_t> bytes;
         if (!assetProvider.readBinaryFile(path, bytes)) {

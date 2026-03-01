@@ -4,7 +4,7 @@
 #include "VulkanContext.h"
 #include "VulkanTexture.h"
 #include "VulkanDescriptor.h"
-#include "AssetProvider.h"
+#include "IAssetProvider.h"
 
 #include <string>
 #include <vector>
@@ -28,7 +28,7 @@ public:
     ~VulkanModel() = default;
 
     // glTF 파일을 로드하고 VulkanMesh들을 생성
-    bool loadFromFile(const AssetProvider& assetProvider, const std::string& filename);
+    bool loadFromFile(const IAssetProvider& assetProvider, const std::string& filename);
     bool initializeDescriptor(VkDescriptorSetLayout materialLayout,
                             uint32_t maxFramesInFlight);
 

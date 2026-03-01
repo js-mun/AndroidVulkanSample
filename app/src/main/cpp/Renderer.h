@@ -1,7 +1,6 @@
 #pragma once
 
 #include "volk.h"
-#include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <vector>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -19,13 +18,14 @@
 #include "VulkanSwapchain.h"
 #include "VulkanSync.h"
 
-class AssetProvider;
+class ISurfaceProvider;
+class IAssetProvider;
 
 class Renderer {
 public:
     bool mFramebufferResized = false;
     
-    explicit Renderer(android_app* app);
+    explicit Renderer(ISurfaceProvider& surfaceProvider, IAssetProvider& assetProvider);
     virtual ~Renderer();
 
     bool initialize();
@@ -38,8 +38,8 @@ public:
     void executeFrameGraph(VkCommandBuffer commandBuffer);
 
 private:
-    android_app* mApp;
-    std::unique_ptr<AssetProvider> mAssetProvider;
+    ISurfaceProvider& mSurfaceProvider;
+    IAssetProvider& mAssetProvider;
     std::unique_ptr<VulkanContext> mContext;
     std::unique_ptr<DescriptorLayouts> mDescriptorLayouts;
     std::unique_ptr<VulkanSwapchain> mSwapchain;

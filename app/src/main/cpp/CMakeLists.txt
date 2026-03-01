@@ -17,6 +17,7 @@ FetchContent_MakeAvailable(glm)
 add_library(mygame SHARED
         main.cpp
         AndroidAssetProvider.cpp
+        AndroidSurfaceProvider.cpp
         DescriptorLayouts.cpp
         GlobalDescriptor.cpp
         Renderer.cpp

@@ -36,7 +36,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 }
 } // namespace
 
-VulkanContext::VulkanContext(struct android_app* app) : mApp(app) {
+VulkanContext::VulkanContext(ISurfaceProvider& surfaceProvider)
+        : mSurfaceProvider(surfaceProvider) {
 }
 
 VulkanContext::~VulkanContext() {
@@ -219,10 +220,7 @@ bool VulkanContext::checkValidationLayerSupport() const {
 }
 
 std::vector<const char*> VulkanContext::getRequiredInstanceExtensions(bool enableValidation) const {
-    std::vector<const char*> extensions = {
-            VK_KHR_SURFACE_EXTENSION_NAME,
-            VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
-    };
+    std::vector<const char*> extensions = mSurfaceProvider.getRequiredInstanceExtensions();
     if (enableValidation) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
@@ -243,14 +241,7 @@ void VulkanContext::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreate
 }
 
 bool VulkanContext::createSurface() {
-    VkAndroidSurfaceCreateInfoKHR surfaceCreateInfo = {};
-    surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
-    surfaceCreateInfo.window = mApp->window;
-    if (vkCreateAndroidSurfaceKHR(mInstance, &surfaceCreateInfo, nullptr, &mSurface) != VK_SUCCESS) {
-        LOGE("Failed to create VkAndroidSurface");
-        return false;
-    }
-    return true;
+    return mSurfaceProvider.createVulkanSurface(mInstance, mSurface);
 }
 
 bool VulkanContext::selectPhysicalDevice() {

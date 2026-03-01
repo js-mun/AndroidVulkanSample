@@ -3,14 +3,23 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <game-activity/GameActivity.h>
 
+#include "AndroidAssetProvider.h"
+#include "AndroidSurfaceProvider.h"
 #include "Renderer.h"
 #include "Log.h"
 
 #include <vector>
+#include <memory>
 
 
 
 extern "C" {
+
+struct AppRuntime {
+    std::unique_ptr<AndroidSurfaceProvider> surfaceProvider;
+    std::unique_ptr<AndroidAssetProvider> assetProvider;
+    std::unique_ptr<Renderer> renderer;
+};
 
 /*!
  * Handles commands sent to this Android application
@@ -26,12 +35,16 @@ void handle_cmd(android_app *pApp, int32_t cmd) {
             // if you change the class here as a reinterpret_cast is dangerous this in the
             // android_main function and the APP_CMD_TERM_WINDOW handler case.
             if (!pApp->userData) {
-                auto* renderer = new Renderer(pApp);
-                if (renderer->initialize()) {
-                    pApp->userData = renderer;
+                auto runtime = std::make_unique<AppRuntime>();
+                runtime->surfaceProvider = std::make_unique<AndroidSurfaceProvider>(pApp);
+                runtime->assetProvider = std::make_unique<AndroidAssetProvider>(
+                        pApp->activity->assetManager);
+                runtime->renderer = std::make_unique<Renderer>(
+                        *runtime->surfaceProvider, *runtime->assetProvider);
+                if (runtime->renderer->initialize()) {
+                    pApp->userData = runtime.release();
                 } else {
                     LOGE("Renderer initialization failed");
-                    delete renderer;
                 }
             }
             break;
@@ -42,24 +55,23 @@ void handle_cmd(android_app *pApp, int32_t cmd) {
             //
             // We have to check if userData is assigned just in case this comes in really quickly
             if (pApp->userData) {
-                //
-                auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
+                auto *runtime = reinterpret_cast<AppRuntime *>(pApp->userData);
                 pApp->userData = nullptr;
-                delete pRenderer;
+                delete runtime;
             }
             break;
         case APP_CMD_CONFIG_CHANGED:
             LOGI("APP_CMD_CONFIG_CHANGED");
             if (pApp->userData) {
-                auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
-                pRenderer->mFramebufferResized = true;
+                auto *runtime = reinterpret_cast<AppRuntime *>(pApp->userData);
+                runtime->renderer->mFramebufferResized = true;
             }
             break;
         case APP_CMD_WINDOW_RESIZED:
             LOGI("APP_CMD_WINDOW_RESIZED");
             if (pApp->userData) {
-                auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
-                pRenderer->mFramebufferResized = true;
+                auto *runtime = reinterpret_cast<AppRuntime *>(pApp->userData);
+                runtime->renderer->mFramebufferResized = true;
             }
             break;
         default:
@@ -134,7 +146,8 @@ void android_main(struct android_app *pApp) {
         if (pApp->userData) {
             // We know that our user data is a Renderer, so reinterpret cast it. If you change your
             // user data remember to change it here
-            auto *pRenderer = reinterpret_cast<Renderer *>(pApp->userData);
+            auto *runtime = reinterpret_cast<AppRuntime *>(pApp->userData);
+            auto *pRenderer = runtime->renderer.get();
 
             auto* inputBuffer = android_app_swap_input_buffers(pApp);
             if (inputBuffer) {

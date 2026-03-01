@@ -1,10 +1,10 @@
 #pragma once
 
-#include "AssetProvider.h"
+#include "IAssetProvider.h"
 
 #include <android/asset_manager.h>
 
-class AndroidAssetProvider final : public AssetProvider {
+class AndroidAssetProvider final : public IAssetProvider {
 public:
     explicit AndroidAssetProvider(AAssetManager* assetManager);
 
@@ -14,4 +14,3 @@ public:
 private:
     AAssetManager* mAssetManager = nullptr;
 };
-

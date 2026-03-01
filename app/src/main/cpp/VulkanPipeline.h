@@ -2,7 +2,7 @@
 
 #include "volk.h"
 #include "vulkan_types.h"
-#include "AssetProvider.h"
+#include "IAssetProvider.h"
 
 #include <vector>
 #include <cstdint>
@@ -32,7 +32,7 @@ public:
     VulkanPipeline& operator=(const VulkanPipeline&) = delete;
 
     bool initialize(VkFormat swapchainImageFormat, VkFormat depthFormat,
-                    const AssetProvider& assetProvider,
+                    const IAssetProvider& assetProvider,
                     VkDescriptorSetLayout globalSetLayout,
                     VkDescriptorSetLayout materialSetLayout,
                     const PipelineConfig& config);
@@ -55,5 +55,5 @@ private:
     PipelineConfig mConfig;
 
     bool createRenderPass(VkFormat imageFormat, VkFormat depthFormat);
-    bool createGraphicsPipeline(const AssetProvider& assetProvider);
+    bool createGraphicsPipeline(const IAssetProvider& assetProvider);
 };

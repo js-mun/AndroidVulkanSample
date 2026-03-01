@@ -1,12 +1,12 @@
 #include "Renderer.h"
-#include "AndroidAssetProvider.h"
 #include "Log.h"
 #include "vulkan_types.h"
 
 #include <array>
 #include <vector>
 
-Renderer::Renderer(struct android_app *app) : mApp(app) {
+Renderer::Renderer(ISurfaceProvider& surfaceProvider, IAssetProvider& assetProvider)
+        : mSurfaceProvider(surfaceProvider), mAssetProvider(assetProvider) {
 }
 
 bool Renderer::initialize() {
@@ -16,9 +16,7 @@ bool Renderer::initialize() {
         return false;
     }
 
-    mAssetProvider = std::make_unique<AndroidAssetProvider>(mApp->activity->assetManager);
-
-    mContext = std::make_unique<VulkanContext>(mApp);
+    mContext = std::make_unique<VulkanContext>(mSurfaceProvider);
     if (!mContext->initialize()) {
         LOGE("Failed to initialize VulkanContext");
         return false;
@@ -47,7 +45,7 @@ bool Renderer::initialize() {
 
     mMainPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
     if (!mMainPipeline->initialize(mSwapchain->getImageFormat(), mSwapchain->getDepthFormat(),
-                               *mAssetProvider,
+                               mAssetProvider,
                                mDescriptorLayouts->getMainGlobalSetLayout(),
                                mDescriptorLayouts->getMainMaterialSetLayout(),
                                mainConfig)) {
@@ -69,8 +67,8 @@ bool Renderer::initialize() {
     shadowConfig.setProfile = PipelineConfig::SetProfile::Shadow;
 
     mShadowPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
-    if (!mShadowPipeline->initialize(mSwapchain->getImageFormat(), 
-            mSwapchain->getDepthFormat(), *mAssetProvider,
+    if (!mShadowPipeline->initialize(mSwapchain->getImageFormat(),
+            mSwapchain->getDepthFormat(), mAssetProvider,
             mDescriptorLayouts->getShadowGlobalSetLayout(),
             VK_NULL_HANDLE,
             shadowConfig)) {
@@ -139,7 +137,7 @@ bool Renderer::initialize() {
     };
     for (const auto& path : modelPaths) {
         auto model = std::make_unique<VulkanModel>(mContext.get());
-        if (!model->loadFromFile(*mAssetProvider, path)) {
+        if (!model->loadFromFile(mAssetProvider, path)) {
             LOGE("Failed to load model: %s", path.c_str());
             return false;
         }

@@ -181,7 +181,7 @@ void VulkanModel::loadAnimations(const tinygltf::Model& model) {
     }
 }
 
-bool VulkanModel::loadFromFile(const AssetProvider& assetProvider, const std::string& filename) {
+bool VulkanModel::loadFromFile(const IAssetProvider& assetProvider, const std::string& filename) {
     if (!hasGlbExtension(filename)) {
         LOGE("Only .glb is supported now: %s", filename.c_str());
         return false;
