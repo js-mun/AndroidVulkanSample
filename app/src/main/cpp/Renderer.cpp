@@ -160,6 +160,7 @@ bool Renderer::initialize() {
     mCamera = std::make_unique<Camera>();
 
     mRenderGraph = std::make_unique<RenderGraph>();
+    mStartTime = std::chrono::steady_clock::now();
     buildFrameGraph();
 
     LOGI("Vulkan Initialization Wrap-up Successful!");
@@ -231,14 +232,10 @@ void Renderer::buildFrameGraph() {
 
             for (size_t i = 0; i < mModels.size(); ++i) {
                 const auto& model = mModels[i];
-                const glm::mat4& modelMatrix = mModelTransforms[i];
-                vkCmdPushConstants(commandBuffer,
-                                   mShadowPipeline->getPipelineLayout(),
-                                   VK_SHADER_STAGE_VERTEX_BIT,
-                                   0,
-                                   sizeof(glm::mat4),
-                                   &modelMatrix);
-                model->draw(commandBuffer);
+                model->draw(commandBuffer,
+                            mShadowPipeline->getPipelineLayout(),
+                            mModelTransforms[i],
+                            mElapsedTimeSec);
             }
 
             vkCmdEndRenderPass(commandBuffer);
@@ -290,18 +287,13 @@ void Renderer::buildFrameGraph() {
 
             for (size_t i = 0; i < mModels.size(); ++i) {
                 const auto& model = mModels[i];
-                const glm::mat4& modelMatrix = mModelTransforms[i];
                 VkDescriptorSet set = model->getDescriptorSet();
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                         mMainPipeline->getPipelineLayout(), 1, 1, &set, 0, nullptr);
-
-                vkCmdPushConstants(commandBuffer,
-                                   mMainPipeline->getPipelineLayout(),
-                                   VK_SHADER_STAGE_VERTEX_BIT,
-                                   0,
-                                   sizeof(glm::mat4),
-                                   &modelMatrix);
-                model->draw(commandBuffer);
+                model->draw(commandBuffer,
+                            mMainPipeline->getPipelineLayout(),
+                            mModelTransforms[i],
+                            mElapsedTimeSec);
             }
 
             vkCmdEndRenderPass(commandBuffer);
@@ -338,6 +330,9 @@ void Renderer::render() {
     VkFence inFlightFence = mSync->getInFlightFence(mCurrentFrame);
     vkWaitForFences(mContext->getDevice(), 1, &inFlightFence, VK_TRUE, UINT64_MAX);
     vkResetFences(mContext->getDevice(), 1, &inFlightFence);
+
+    const auto now = std::chrono::steady_clock::now();
+    mElapsedTimeSec = std::chrono::duration<float>(now - mStartTime).count();
 
     // Uniform Buffer 업데이트 (회전 및 종횡비 계산)
     updateUniformBuffer(mCurrentFrame);

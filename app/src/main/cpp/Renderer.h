@@ -2,6 +2,7 @@
 
 #include "volk.h"
 #include <vector>
+#include <chrono>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -51,6 +52,8 @@ private:
 
     std::vector<std::unique_ptr<VulkanModel>> mModels;
     std::vector<glm::mat4> mModelTransforms;
+    std::chrono::steady_clock::time_point mStartTime{};
+    float mElapsedTimeSec = 0.0f;
 
     std::unique_ptr<Camera> mCamera;
 

@@ -5,7 +5,9 @@
 
 #include "VulkanModel.h"
 #include "Log.h"
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
 
@@ -126,56 +128,258 @@ glm::mat4 getNodeLocalTransform(const tinygltf::Node& node) {
 VulkanModel::VulkanModel(VulkanContext* context) : mContext(context) {
 }
 
-glm::mat4 VulkanModel::getAnimationTransform(float time) {
-    if (mRotationAnim.times.empty()) return glm::mat4(1.0f);
-
-    // 1. 전체 애니메이션 시간을 넘어가면 반복(Loop) 처리
-    float animTime = fmod(time, mRotationAnim.times.back());
-
-    // 2. 현재 시간에 해당하는 키프레임 구간 찾기
-    size_t i = 0;
-    while (i < mRotationAnim.times.size() - 1 && animTime > mRotationAnim.times[i + 1]) {
-        i++;
+glm::quat VulkanModel::sampleNodeRotation(int nodeIndex, float timeSec) const {
+    const auto it = mNodeRotationAnims.find(nodeIndex);
+    if (it == mNodeRotationAnims.end()) {
+        return mNodeBaseRotation[nodeIndex];
+    }
+    const RotationAnimData& anim = it->second;
+    if (anim.times.empty() || anim.rotations.empty() || anim.times.size() != anim.rotations.size()) {
+        return mNodeBaseRotation[nodeIndex];
+    }
+    if (anim.times.size() == 1) {
+        return glm::normalize(anim.rotations[0]);
     }
 
-    // 3. 두 키프레임 사이의 보간 비율(0.0 ~ 1.0) 계산
-    float t1 = mRotationAnim.times[i];
-    float t2 = mRotationAnim.times[i + 1];
-    float alpha = (animTime - t1) / (t2 - t1);
+    const float duration = anim.times.back();
+    if (duration <= 0.0f) {
+        return glm::normalize(anim.rotations[0]);
+    }
 
-    // 4. 회전 보간 (Spherical Linear Interpolation - SLERP)
-    glm::quat q1 = mRotationAnim.rotations[i];
-    glm::quat q2 = mRotationAnim.rotations[i + 1];
-    glm::quat blendedQuat = glm::slerp(q1, q2, alpha);
+    float t = fmod(timeSec, duration);
+    if (t < 0.0f) {
+        t += duration;
+    }
 
-    // 5. 최종 회전 행렬로 변환하여 반환
-    return glm::mat4_cast(blendedQuat);
+    size_t i = 0;
+    while ((i + 1) < anim.times.size() && t > anim.times[i + 1]) {
+        i++;
+    }
+    if ((i + 1) >= anim.times.size()) {
+        return glm::normalize(anim.rotations.back());
+    }
+
+    const float t1 = anim.times[i];
+    const float t2 = anim.times[i + 1];
+    float alpha = 0.0f;
+    if (t2 > t1) {
+        alpha = (t - t1) / (t2 - t1);
+    }
+    return glm::normalize(glm::slerp(glm::normalize(anim.rotations[i]),
+                                     glm::normalize(anim.rotations[i + 1]),
+                                     alpha));
+}
+
+glm::vec3 VulkanModel::sampleNodeTranslation(int nodeIndex, float timeSec) const {
+    const auto it = mNodeTranslationAnims.find(nodeIndex);
+    if (it == mNodeTranslationAnims.end()) {
+        return mNodeBaseTranslation[nodeIndex];
+    }
+    const Vec3AnimData& anim = it->second;
+    if (anim.times.empty() || anim.values.empty() || anim.times.size() != anim.values.size()) {
+        return mNodeBaseTranslation[nodeIndex];
+    }
+    if (anim.times.size() == 1) {
+        return anim.values[0];
+    }
+
+    const float duration = anim.times.back();
+    if (duration <= 0.0f) {
+        return anim.values[0];
+    }
+
+    float t = fmod(timeSec, duration);
+    if (t < 0.0f) {
+        t += duration;
+    }
+
+    size_t i = 0;
+    while ((i + 1) < anim.times.size() && t > anim.times[i + 1]) {
+        i++;
+    }
+    if ((i + 1) >= anim.times.size()) {
+        return anim.values.back();
+    }
+
+    const float t1 = anim.times[i];
+    const float t2 = anim.times[i + 1];
+    float alpha = 0.0f;
+    if (t2 > t1) {
+        alpha = (t - t1) / (t2 - t1);
+    }
+    return glm::mix(anim.values[i], anim.values[i + 1], alpha);
+}
+
+glm::vec3 VulkanModel::sampleNodeScale(int nodeIndex, float timeSec) const {
+    const auto it = mNodeScaleAnims.find(nodeIndex);
+    if (it == mNodeScaleAnims.end()) {
+        return mNodeBaseScale[nodeIndex];
+    }
+    const Vec3AnimData& anim = it->second;
+    if (anim.times.empty() || anim.values.empty() || anim.times.size() != anim.values.size()) {
+        return mNodeBaseScale[nodeIndex];
+    }
+    if (anim.times.size() == 1) {
+        return anim.values[0];
+    }
+
+    const float duration = anim.times.back();
+    if (duration <= 0.0f) {
+        return anim.values[0];
+    }
+
+    float t = fmod(timeSec, duration);
+    if (t < 0.0f) {
+        t += duration;
+    }
+
+    size_t i = 0;
+    while ((i + 1) < anim.times.size() && t > anim.times[i + 1]) {
+        i++;
+    }
+    if ((i + 1) >= anim.times.size()) {
+        return anim.values.back();
+    }
+
+    const float t1 = anim.times[i];
+    const float t2 = anim.times[i + 1];
+    float alpha = 0.0f;
+    if (t2 > t1) {
+        alpha = (t - t1) / (t2 - t1);
+    }
+    return glm::mix(anim.values[i], anim.values[i + 1], alpha);
+}
+
+glm::mat4 VulkanModel::getNodeLocalTransformAtTime(int nodeIndex, float timeSec) const {
+    if (mNodeUseMatrix[nodeIndex]) {
+        // matrix 노드는 그대로 사용 (rotation 채널 대체는 지원하지 않음)
+        return mNodeBaseMatrix[nodeIndex];
+    }
+
+    const glm::vec3 t = sampleNodeTranslation(nodeIndex, timeSec);
+    const glm::vec3 s = sampleNodeScale(nodeIndex, timeSec);
+    const glm::quat r = sampleNodeRotation(nodeIndex, timeSec);
+    return glm::translate(glm::mat4(1.0f), t) * glm::toMat4(r) * glm::scale(glm::mat4(1.0f), s);
+}
+
+void VulkanModel::buildNodeWorldRecursive(int nodeIndex, const glm::mat4& parentWorld, float timeSec) {
+    const glm::mat4 local = getNodeLocalTransformAtTime(nodeIndex, timeSec);
+    const glm::mat4 world = parentWorld * local;
+    mNodeWorldCache[nodeIndex] = world;
+
+    for (size_t i = 0; i < mNodeParents.size(); ++i) {
+        if (mNodeParents[i] == nodeIndex) {
+            buildNodeWorldRecursive(static_cast<int>(i), world, timeSec);
+        }
+    }
+}
+
+void VulkanModel::updateNodeWorldCache(float timeSec) {
+    if (mNodeWorldCache.size() != mNodeParents.size()) {
+        mNodeWorldCache.assign(mNodeParents.size(), glm::mat4(1.0f));
+    }
+    for (int root : mSceneRootNodes) {
+        buildNodeWorldRecursive(root, glm::mat4(1.0f), timeSec);
+    }
+}
+
+void VulkanModel::extractNodeBaseTransforms(const tinygltf::Model& model) {
+    const size_t n = model.nodes.size();
+    mNodeParents.assign(n, -1);
+    mNodeBaseTranslation.assign(n, glm::vec3(0.0f));
+    mNodeBaseRotation.assign(n, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+    mNodeBaseScale.assign(n, glm::vec3(1.0f));
+    mNodeUseMatrix.assign(n, false);
+    mNodeBaseMatrix.assign(n, glm::mat4(1.0f));
+    mNodeWorldCache.assign(n, glm::mat4(1.0f));
+
+    for (size_t i = 0; i < n; ++i) {
+        const auto& node = model.nodes[i];
+        if (node.matrix.size() == 16) {
+            mNodeUseMatrix[i] = true;
+            mNodeBaseMatrix[i] = getNodeLocalTransform(node);
+        } else {
+            if (node.translation.size() == 3) {
+                mNodeBaseTranslation[i] = glm::vec3(
+                        static_cast<float>(node.translation[0]),
+                        static_cast<float>(node.translation[1]),
+                        static_cast<float>(node.translation[2]));
+            }
+            if (node.rotation.size() == 4) {
+                mNodeBaseRotation[i] = glm::normalize(glm::quat(
+                        static_cast<float>(node.rotation[3]),
+                        static_cast<float>(node.rotation[0]),
+                        static_cast<float>(node.rotation[1]),
+                        static_cast<float>(node.rotation[2])));
+            }
+            if (node.scale.size() == 3) {
+                mNodeBaseScale[i] = glm::vec3(
+                        static_cast<float>(node.scale[0]),
+                        static_cast<float>(node.scale[1]),
+                        static_cast<float>(node.scale[2]));
+            }
+        }
+
+        for (int child : node.children) {
+            if (child >= 0 && static_cast<size_t>(child) < n) {
+                mNodeParents[child] = static_cast<int>(i);
+            }
+        }
+    }
 }
 
 void VulkanModel::loadAnimations(const tinygltf::Model& model) {
+    mNodeRotationAnims.clear();
+    mNodeTranslationAnims.clear();
+    mNodeScaleAnims.clear();
     if (model.animations.empty()) return;
 
-    // AnimatedCube는 첫 번째 애니메이션의 첫 번째 채널이 회전입니다.
     const auto& anim = model.animations[0];
     for (const auto& channel : anim.channels) {
+        if (channel.target_node < 0 ||
+            static_cast<size_t>(channel.target_node) >= model.nodes.size()) {
+            continue;
+        }
+
+        const auto& sampler = anim.samplers[channel.sampler];
+        const auto& inputAccessor = model.accessors[sampler.input];
+        const auto& inputView = model.bufferViews[inputAccessor.bufferView];
+        const auto& inputBuffer = model.buffers[inputView.buffer];
+        const float* times = reinterpret_cast<const float*>(
+                &inputBuffer.data[inputView.byteOffset + inputAccessor.byteOffset]);
+
+        const auto& outputAccessor = model.accessors[sampler.output];
+        const auto& outputView = model.bufferViews[outputAccessor.bufferView];
+        const auto& outputBuffer = model.buffers[outputView.buffer];
+        const float* rotations = reinterpret_cast<const float*>(
+                &outputBuffer.data[outputView.byteOffset + outputAccessor.byteOffset]);
+
         if (channel.target_path == "rotation") {
-            const auto& sampler = anim.samplers[channel.sampler];
-
-            // 1. 시간 데이터 추출
-            const auto& inputAccessor = model.accessors[sampler.input];
-            const auto& inputView = model.bufferViews[inputAccessor.bufferView];
-            const auto& inputBuffer = model.buffers[inputView.buffer];
-            const float* times = reinterpret_cast<const float*>(&inputBuffer.data[inputView.byteOffset + inputAccessor.byteOffset]);
-            mRotationAnim.times.assign(times, times + inputAccessor.count);
-
-            // 2. 회전 데이터(Quaternion) 추출
-            const auto& outputAccessor = model.accessors[sampler.output];
-            const auto& outputView = model.bufferViews[outputAccessor.bufferView];
-            const auto& outputBuffer = model.buffers[outputView.buffer];
-            const float* rotations = reinterpret_cast<const float*>(&outputBuffer.data[outputView.byteOffset + outputAccessor.byteOffset]);
-
+            RotationAnimData data;
+            data.times.assign(times, times + inputAccessor.count);
+            data.rotations.reserve(outputAccessor.count);
             for (size_t i = 0; i < outputAccessor.count; ++i) {
-                mRotationAnim.rotations.push_back(glm::make_quat(&rotations[i * 4]));
+                const float x = rotations[i * 4 + 0];
+                const float y = rotations[i * 4 + 1];
+                const float z = rotations[i * 4 + 2];
+                const float w = rotations[i * 4 + 3];
+                data.rotations.push_back(glm::normalize(glm::quat(w, x, y, z)));
+            }
+            mNodeRotationAnims[channel.target_node] = std::move(data);
+        } else if (channel.target_path == "translation" || channel.target_path == "scale") {
+            Vec3AnimData data;
+            data.times.assign(times, times + inputAccessor.count);
+            data.values.reserve(outputAccessor.count);
+            for (size_t i = 0; i < outputAccessor.count; ++i) {
+                const float x = rotations[i * 3 + 0];
+                const float y = rotations[i * 3 + 1];
+                const float z = rotations[i * 3 + 2];
+                data.values.emplace_back(x, y, z);
+            }
+            if (channel.target_path == "translation") {
+                mNodeTranslationAnims[channel.target_node] = std::move(data);
+            } else {
+                mNodeScaleAnims[channel.target_node] = std::move(data);
             }
         }
     }
@@ -227,6 +431,7 @@ bool VulkanModel::loadFromFile(const IAssetProvider& assetProvider, const std::s
     }
 
     loadTextures(model);
+    extractNodeBaseTransforms(model);
     processModel(model);
     loadAnimations(model);
 
@@ -272,7 +477,8 @@ void VulkanModel::loadTextures(const tinygltf::Model& model) {
 }
 
 void VulkanModel::processModel(const tinygltf::Model& model) {
-    mMeshes.clear();
+    mPrimitiveDraws.clear();
+    mSceneRootNodes.clear();
 
     int sceneIndex = model.defaultScene;
     if (sceneIndex < 0 && !model.scenes.empty()) {
@@ -285,34 +491,33 @@ void VulkanModel::processModel(const tinygltf::Model& model) {
 
     const auto& scene = model.scenes[sceneIndex];
     for (int rootNode : scene.nodes) {
-        processNode(model, rootNode, glm::mat4(1.0f));
+        mSceneRootNodes.push_back(rootNode);
+        processNode(model, rootNode, -1);
     }
 }
 
-void VulkanModel::processNode(const tinygltf::Model& model, int nodeIndex, const glm::mat4& parentWorld) {
+void VulkanModel::processNode(const tinygltf::Model& model, int nodeIndex, int parentNode) {
     if (nodeIndex < 0 || static_cast<size_t>(nodeIndex) >= model.nodes.size()) {
         return;
     }
 
+    mNodeParents[nodeIndex] = parentNode;
     const auto& node = model.nodes[nodeIndex];
-    const glm::mat4 localTransform = getNodeLocalTransform(node);
-    const glm::mat4 worldTransform = parentWorld * localTransform;
-
     if (node.mesh >= 0 && static_cast<size_t>(node.mesh) < model.meshes.size()) {
         const auto& mesh = model.meshes[node.mesh];
         for (const auto& primitive : mesh.primitives) {
-            processPrimitive(model, primitive, worldTransform);
+            processPrimitive(model, primitive, nodeIndex);
         }
     }
 
     for (int childIndex : node.children) {
-        processNode(model, childIndex, worldTransform);
+        processNode(model, childIndex, nodeIndex);
     }
 }
 
 void VulkanModel::processPrimitive(const tinygltf::Model& model,
                                    const tinygltf::Primitive& primitive,
-                                   const glm::mat4& worldTransform) {
+                                   int nodeIndex) {
     if (primitive.attributes.find("POSITION") == primitive.attributes.end()) {
         return;
     }
@@ -334,21 +539,18 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
         }
     }
 
-    // 1. POSITION 추출 + node world transform 적용
+    // 1. POSITION 추출 (mesh local space)
     const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
     const tinygltf::BufferView& posView = model.bufferViews[posAccessor.bufferView];
     const tinygltf::Buffer& posBuffer = model.buffers[posView.buffer];
     const float* positions = reinterpret_cast<const float*>(&posBuffer.data[posView.byteOffset + posAccessor.byteOffset]);
-    const glm::mat3 nodeNormalMat = glm::mat3(glm::transpose(glm::inverse(worldTransform)));
 
     vertices.resize(posAccessor.count);
     for (size_t i = 0; i < posAccessor.count; i++) {
-        const glm::vec3 localPos(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
-        const glm::vec4 worldPos4 = worldTransform * glm::vec4(localPos, 1.0f);
-        vertices[i].pos = glm::vec3(worldPos4);
+        vertices[i].pos = glm::vec3(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
         vertices[i].color = baseColorFactor; // material baseColor 기본값
         vertices[i].texCoord = glm::vec2(0.0f, 0.0f); // UV 초기화
-        vertices[i].normal = glm::normalize(nodeNormalMat * glm::vec3(0.0f, 1.0f, 0.0f)); // NORMAL 없을 때 기본값
+        vertices[i].normal = glm::vec3(0.0f, 1.0f, 0.0f); // NORMAL 없을 때 기본값
     }
 
     // 1.1 COLOR_0 추출 (존재하는 경우에만)
@@ -401,7 +603,7 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
         int stride = normalAccessor.ByteStride(normalView);
         for (size_t i = 0; i < normalAccessor.count; i++) {
             const float* n = reinterpret_cast<const float*>(normalData + i * stride);
-            vertices[i].normal = glm::normalize(nodeNormalMat * glm::vec3(n[0], n[1], n[2]));
+            vertices[i].normal = glm::normalize(glm::vec3(n[0], n[1], n[2]));
         }
         if (DEBUG_LOG) LOGI("Extracted NORMAL data for %zu vertices", normalAccessor.count);
     }
@@ -440,14 +642,17 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
         }
     }
 
-    // 3. VulkanMesh 생성
-    mMeshes.push_back(std::make_unique<VulkanMesh>(mContext, vertices, indices));
+    // 3. VulkanMesh 생성 + node mapping
+    PrimitiveDrawItem drawItem{};
+    drawItem.mesh = std::make_unique<VulkanMesh>(mContext, vertices, indices);
+    drawItem.nodeIndex = nodeIndex;
+    mPrimitiveDraws.push_back(std::move(drawItem));
 
     // Debugging: transformed vertex 확인
     if (DEBUG_LOG) {
         LOGV("Mesh Primitive: Vertex Count = %zu, Index Count = %zu", vertices.size(), indices.size());
         if (!vertices.empty()) {
-            LOGI("[glTF] transformed v0=(%.3f, %.3f, %.3f)",
+            LOGI("[glTF] local v0=(%.3f, %.3f, %.3f)",
                 vertices[0].pos.x, vertices[0].pos.y, vertices[0].pos.z);
         }
     for (size_t i = 0; i < std::min(vertices.size(), size_t(10)); ++i) {
@@ -461,8 +666,27 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
 }
 }
 
-void VulkanModel::draw(VkCommandBuffer commandBuffer) {
-    for (const auto& mesh : mMeshes) {
-        mesh->draw(commandBuffer);
+void VulkanModel::draw(VkCommandBuffer commandBuffer,
+                       VkPipelineLayout pipelineLayout,
+                       const glm::mat4& modelBase,
+                       float timeSec) {
+    updateNodeWorldCache(timeSec);
+
+    for (const auto& item : mPrimitiveDraws) {
+        if (!item.mesh) {
+            continue;
+        }
+        const int nodeIndex = item.nodeIndex;
+        if (nodeIndex < 0 || static_cast<size_t>(nodeIndex) >= mNodeWorldCache.size()) {
+            continue;
+        }
+        const glm::mat4 model = modelBase * mNodeWorldCache[nodeIndex];
+        vkCmdPushConstants(commandBuffer,
+                           pipelineLayout,
+                           VK_SHADER_STAGE_VERTEX_BIT,
+                           0,
+                           sizeof(glm::mat4),
+                           &model);
+        item.mesh->draw(commandBuffer);
     }
 }
