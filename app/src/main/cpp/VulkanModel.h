@@ -29,12 +29,9 @@ public:
 
     // glTF 파일을 로드하고 VulkanMesh들을 생성
     bool loadFromFile(AAssetManager* assetManager, const std::string& filename);
-    bool initializeDescriptor(VkDescriptorSetLayout layout,
-                              const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
-                              uint32_t maxFramesInFlight,
-                              VkImageView shadowView,
-                              VkSampler shadowSampler);
-    void updateShadowMap(VkImageView shadowView, VkSampler shadowSampler);
+    bool initializeDescriptor(VkDescriptorSetLayout materialLayout,
+                            uint32_t maxFramesInFlight);
+
     VkDescriptorSet getDescriptorSet(uint32_t frameIndex) const;
 
     // 모든 메시를 순회하며 그리기

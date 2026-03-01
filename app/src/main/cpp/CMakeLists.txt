@@ -16,6 +16,7 @@ FetchContent_MakeAvailable(glm)
 # one used for loading in your Kotlin/Java or AndroidManifest.txt files.
 add_library(mygame SHARED
         main.cpp
+        GlobalDescriptor.cpp
         Renderer.cpp
         RenderGraph.cpp
         ShadowResources.cpp

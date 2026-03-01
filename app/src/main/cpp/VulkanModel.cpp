@@ -232,19 +232,10 @@ bool VulkanModel::loadFromFile(AAssetManager* assetManager, const std::string& f
     return true;
 }
 
-bool VulkanModel::initializeDescriptor(VkDescriptorSetLayout layout,
-                                       const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
-                                       uint32_t maxFramesInFlight,
-                                       VkImageView shadowView,
-                                       VkSampler shadowSampler) {
+bool VulkanModel::initializeDescriptor(VkDescriptorSetLayout materialLayout,
+                                       uint32_t maxFramesInFlight) {
     mDescriptor = std::make_unique<VulkanDescriptor>(mContext->getDevice(), maxFramesInFlight);
-    return mDescriptor->initialize(layout, uniformBuffers, mTextures, shadowView, shadowSampler);
-}
-
-void VulkanModel::updateShadowMap(VkImageView shadowView, VkSampler shadowSampler) {
-    if (mDescriptor) {
-        mDescriptor->updateShadowMap(shadowView, shadowSampler);
-    }
+    return mDescriptor->initialize(materialLayout, mTextures);
 }
 
 VkDescriptorSet VulkanModel::getDescriptorSet(uint32_t frameIndex) const {

@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Camera.h"
+#include "GlobalDescriptor.h"
 #include "RenderGraph.h"
 #include "ShadowResources.h"
 #include "VulkanBuffer.h"
@@ -56,6 +57,7 @@ private:
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
     std::vector<std::unique_ptr<VulkanBuffer>> mUniformBuffers;
+    std::unique_ptr<GlobalDescriptor> mGlobalDescriptor;
 
 private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);

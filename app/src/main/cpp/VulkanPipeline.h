@@ -30,14 +30,16 @@ public:
 
     VkRenderPass getRenderPass() const { return mRenderPass; }
     VkPipelineLayout getPipelineLayout() const { return mPipelineLayout; }
-    VkDescriptorSetLayout getDescriptorSetLayout() const { return mDescriptorSetLayout; }
+    VkDescriptorSetLayout getGlobalSetLayout() const { return mGlobalSetLayout; }
+    VkDescriptorSetLayout getMaterialSetLayout() const { return mMaterialSetLayout; }
     VkPipeline getGraphicsPipeline() const { return mGraphicsPipeline; }
 
 private:
     VkDevice mDevice;
 
     VkRenderPass mRenderPass = VK_NULL_HANDLE;
-    VkDescriptorSetLayout mDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout mGlobalSetLayout = VK_NULL_HANDLE;    // set = 0
+    VkDescriptorSetLayout mMaterialSetLayout = VK_NULL_HANDLE;  // set = 1
     VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
     VkPipeline mGraphicsPipeline = VK_NULL_HANDLE;
 

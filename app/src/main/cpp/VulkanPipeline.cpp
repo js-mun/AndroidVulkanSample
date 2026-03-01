@@ -30,8 +30,11 @@ VulkanPipeline::~VulkanPipeline() {
     if (mPipelineLayout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
     }
-    if (mDescriptorSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(mDevice, mDescriptorSetLayout, nullptr);
+    if (mMaterialSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(mDevice, mMaterialSetLayout, nullptr);
+    }
+    if (mGlobalSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(mDevice, mGlobalSetLayout, nullptr);
     }
     if (mRenderPass != VK_NULL_HANDLE) {
         vkDestroyRenderPass(mDevice, mRenderPass, nullptr);
@@ -127,24 +130,44 @@ bool VulkanPipeline::createRenderPass(VkFormat imageFormat, VkFormat depthFormat
 }
 
 bool VulkanPipeline::createDescriptorSetLayout() {
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    // Binding 0: Uniform Buffer (Vertex Shader)
-    bindings.push_back({0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr});
-    // ShadowPipeline에도 binding 1, 2가 추가되는데, mDescriptor 재사용을 위해 추가 
-    bindings.push_back({1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
-            VK_SHADER_STAGE_FRAGMENT_BIT, nullptr});
-    bindings.push_back({2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
-            VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}); // shadow map
+    // set = 0 : global (UBO + shadow)
+    std::vector<VkDescriptorSetLayoutBinding> globalBindings;
+    globalBindings.push_back({
+        0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr
+    });
+    globalBindings.push_back({
+        2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
+        VK_SHADER_STAGE_FRAGMENT_BIT, nullptr
+    });
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings = bindings.data();
+    VkDescriptorSetLayoutCreateInfo globalInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    globalInfo.bindingCount = static_cast<uint32_t>(globalBindings.size());
+    globalInfo.pBindings = globalBindings.data();
 
-    if (vkCreateDescriptorSetLayout(mDevice, &layoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS) {
-        LOGE("Failed to create Descriptor Set Layout");
+    if (vkCreateDescriptorSetLayout(mDevice, &globalInfo, nullptr, &mGlobalSetLayout) != VK_SUCCESS) {
+        LOGE("Failed to create global descriptor set layout");
         return false;
     }
+
+    // set = 1 : material (base texture)
+    std::vector<VkDescriptorSetLayoutBinding> materialBindings;
+    materialBindings.push_back({
+        1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
+        VK_SHADER_STAGE_FRAGMENT_BIT, nullptr
+    });
+
+    VkDescriptorSetLayoutCreateInfo materialInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    materialInfo.bindingCount = static_cast<uint32_t>(materialBindings.size());
+    materialInfo.pBindings = materialBindings.data();
+
+    if (vkCreateDescriptorSetLayout(mDevice, &materialInfo, nullptr, &mMaterialSetLayout) != VK_SUCCESS) {
+        LOGE("Failed to create material descriptor set layout");
+        vkDestroyDescriptorSetLayout(mDevice, mGlobalSetLayout, nullptr);
+        mGlobalSetLayout = VK_NULL_HANDLE;
+        return false;
+    }
+
     return true;
 }
 
@@ -233,9 +256,13 @@ bool VulkanPipeline::createGraphicsPipeline(AAssetManager* assetManager) {
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(glm::mat4);
 
+    VkDescriptorSetLayout setLayouts[] = {
+        mGlobalSetLayout,   // set = 0
+        mMaterialSetLayout  // set = 1
+    };
     VkPipelineLayoutCreateInfo layoutInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &mDescriptorSetLayout;
+    layoutInfo.setLayoutCount = 2;
+    layoutInfo.pSetLayouts = setLayouts;
     layoutInfo.pushConstantRangeCount = 1;
     layoutInfo.pPushConstantRanges = &pushConstantRange;
 

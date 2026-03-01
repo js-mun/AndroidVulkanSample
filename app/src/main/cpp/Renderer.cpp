@@ -94,10 +94,21 @@ bool Renderer::initialize() {
         mUniformBuffers[i]->map();
     }
 
+    mGlobalDescriptor = std::make_unique<GlobalDescriptor>(
+            mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
+    if (!mGlobalDescriptor->initialize(
+            mMainPipeline->getGlobalSetLayout(),
+            mUniformBuffers,
+            mShadowResources->getDepthView(),
+            mShadowResources->getSampler())) {
+        LOGE("Failed to initialize global descriptor");
+        return false;
+    }
+
     // 모델들을 로드하고 각 모델 디스크립터를 초기화합니다.
     const std::vector<std::string> modelPaths = {
             "glTF/plane.glb",
-             "glTF/AnimatedCube/AnimatedCube.gltf",
+            "glTF/AnimatedCube/AnimatedCube.gltf",
     };
     for (const auto& path : modelPaths) {
         auto model = std::make_unique<VulkanModel>(mContext.get());
@@ -105,11 +116,8 @@ bool Renderer::initialize() {
             LOGE("Failed to load model: %s", path.c_str());
             return false;
         }
-        if (!model->initializeDescriptor(mMainPipeline->getDescriptorSetLayout(),
-                mUniformBuffers,
-                MAX_FRAMES_IN_FLIGHT,
-                mShadowResources->getDepthView(),
-                mShadowResources->getSampler())) {
+        if (!model->initializeDescriptor(mMainPipeline->getMaterialSetLayout(),
+                MAX_FRAMES_IN_FLIGHT)) {
             LOGE("Failed to initialize model descriptor: %s", path.c_str());
             return false;
         }
@@ -191,14 +199,14 @@ void Renderer::buildFrameGraph() {
             // Shadow acne 완화를 위해 shadow pipeline 설정값과 동일한 bias를 사용
             vkCmdSetDepthBias(commandBuffer, 1.25f, 0.0f, 1.75f);
 
+            VkDescriptorSet globalSet = mGlobalDescriptor->getSet(mCurrentFrame);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    mShadowPipeline->getPipelineLayout(),
+                                    0, 1, &globalSet, 0, nullptr);
+
             for (size_t i = 0; i < mModels.size(); ++i) {
                 const auto& model = mModels[i];
                 const glm::mat4& modelMatrix = mModelTransforms[i];
-                VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        mShadowPipeline->getPipelineLayout(),
-                                        0, 1, &set, 0, nullptr);
-
                 vkCmdPushConstants(commandBuffer,
                                    mShadowPipeline->getPipelineLayout(),
                                    VK_SHADER_STAGE_VERTEX_BIT,
@@ -249,13 +257,18 @@ void Renderer::buildFrameGraph() {
             scissor.offset = {0, 0};
             scissor.extent = mSwapchain->getExtent();
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-            
+
+            VkDescriptorSet globalSet = mGlobalDescriptor->getSet(mCurrentFrame);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    mMainPipeline->getPipelineLayout(),
+                                    0, 1, &globalSet, 0, nullptr);
+
             for (size_t i = 0; i < mModels.size(); ++i) {
                 const auto& model = mModels[i];
                 const glm::mat4& modelMatrix = mModelTransforms[i];
                 VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        mMainPipeline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
+                                        mMainPipeline->getPipelineLayout(), 1, 1, &set, 0, nullptr);
 
                 vkCmdPushConstants(commandBuffer,
                                    mMainPipeline->getPipelineLayout(),
@@ -289,10 +302,9 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        for (auto& model : mModels) {
-            model->updateShadowMap(mShadowResources->getDepthView(),
-                    mShadowResources->getSampler());
-        }
+        mGlobalDescriptor->updateShadowMap(
+                mShadowResources->getDepthView(),
+                mShadowResources->getSampler());
         mFrameGraphReady = false;
         return;
     }
@@ -315,10 +327,9 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        for (auto& model : mModels) {
-            model->updateShadowMap(mShadowResources->getDepthView(),
-                    mShadowResources->getSampler());
-        }
+        mGlobalDescriptor->updateShadowMap(
+                mShadowResources->getDepthView(),
+                mShadowResources->getSampler());
         mFrameGraphReady = false;
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -372,10 +383,9 @@ void Renderer::render() {
         mSwapchain->recreate(mMainPipeline->getRenderPass());
         mShadowResources->recreate(mShadowPipeline->getRenderPass(),
                 mSwapchain->getDepthFormat());
-        for (auto& model : mModels) {
-            model->updateShadowMap(mShadowResources->getDepthView(),
-                    mShadowResources->getSampler());
-        }
+        mGlobalDescriptor->updateShadowMap(
+                mShadowResources->getDepthView(),
+                mShadowResources->getSampler());
         mFrameGraphReady = false;
     }
 

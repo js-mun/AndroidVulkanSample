@@ -1,7 +1,6 @@
 #pragma once
 
 #include "volk.h"
-#include "VulkanBuffer.h"
 #include "VulkanTexture.h"
 #include <vector>
 #include <memory>
@@ -11,19 +10,15 @@ public:
     VulkanDescriptor(VkDevice device, uint32_t maxFramesInFlight);
     ~VulkanDescriptor();
 
-    // Disable copying
     VulkanDescriptor(const VulkanDescriptor&) = delete;
     VulkanDescriptor& operator=(const VulkanDescriptor&) = delete;
 
-    bool initialize(VkDescriptorSetLayout layout,
-                    const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
-                    const std::vector<std::unique_ptr<VulkanTexture>>& textures,
-                    VkImageView shadowView, VkSampler shadowSampler);
-
-    void updateShadowMap(VkImageView shadowView, VkSampler shadowSampler);
+    // material set only: binding 1 (base texture)
+    bool initialize(VkDescriptorSetLayout materialLayout,
+                    const std::vector<std::unique_ptr<VulkanTexture>>& textures);
 
     VkDescriptorSet getSet(uint32_t index) const { return mDescriptorSets[index]; }
-    
+
 private:
     VkDevice mDevice;
     uint32_t mMaxFramesInFlight;
@@ -31,9 +26,7 @@ private:
     VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> mDescriptorSets;
 
-    bool createDescriptorPool(uint32_t textureCount);
+    bool createDescriptorPool();
     bool allocateDescriptorSets(VkDescriptorSetLayout layout);
-    void updateDescriptorSets(const std::vector<std::unique_ptr<VulkanBuffer>>& uniformBuffers,
-                              const std::vector<std::unique_ptr<VulkanTexture>>& textures,
-                              VkImageView shadowView, VkSampler shadowSampler);
+    void updateDescriptorSets(const std::vector<std::unique_ptr<VulkanTexture>>& textures);
 };
