@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "desktop: configure",
+      "type": "shell",
+      "command": "cmake -S desktop -B desktop/build -G Ninja"
+    },
+    {
+      "label": "desktop: configure:release",
+      "type": "shell",
+      "command": "cmake -S desktop -B desktop/build-release -G Ninja -DCMAKE_BUILD_TYPE=Release"
+    },
+    {
+      "label": "desktop: build",
+      "type": "shell",
+      "command": "cmake --build desktop/build -j",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": "desktop: configure"
+    },
+    {
+      "label": "desktop: build:release",
+      "type": "shell",
+      "command": "cmake --build desktop/build-release -j",
+      "dependsOn": "desktop: configure:release"
+    },
+    {
+      "label": "desktop: run",
+      "type": "shell",
+      "command": "./desktop/build/mygame_desktop app/src/main/assets/",
+      "dependsOn": "desktop: build"
+    },
+    {
+      "label": "desktop: run:release",
+      "type": "shell",
+      "command": "./desktop/build-release/mygame_desktop app/src/main/assets/",
+      "dependsOn": "desktop: build:release"
+    }
+  ]
+}
