@@ -1,6 +1,6 @@
 #include "Renderer.h"
+#include "AndroidAssetProvider.h"
 #include "Log.h"
-#include "asset_utils.h"
 #include "vulkan_types.h"
 
 #include <array>
@@ -15,6 +15,8 @@ bool Renderer::initialize() {
         LOGE("Failed to initialize volk");
         return false;
     }
+
+    mAssetProvider = std::make_unique<AndroidAssetProvider>(mApp->activity->assetManager);
 
     mContext = std::make_unique<VulkanContext>(mApp);
     if (!mContext->initialize()) {
@@ -45,7 +47,7 @@ bool Renderer::initialize() {
 
     mMainPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
     if (!mMainPipeline->initialize(mSwapchain->getImageFormat(), mSwapchain->getDepthFormat(),
-                               mApp->activity->assetManager,
+                               *mAssetProvider,
                                mDescriptorLayouts->getMainGlobalSetLayout(),
                                mDescriptorLayouts->getMainMaterialSetLayout(),
                                mainConfig)) {
@@ -68,7 +70,7 @@ bool Renderer::initialize() {
 
     mShadowPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
     if (!mShadowPipeline->initialize(mSwapchain->getImageFormat(), 
-            mSwapchain->getDepthFormat(), mApp->activity->assetManager,
+            mSwapchain->getDepthFormat(), *mAssetProvider,
             mDescriptorLayouts->getShadowGlobalSetLayout(),
             VK_NULL_HANDLE,
             shadowConfig)) {
@@ -133,11 +135,11 @@ bool Renderer::initialize() {
     // 모델들을 로드하고 각 모델 디스크립터를 초기화합니다.
     const std::vector<std::string> modelPaths = {
             "glTF/plane.glb",
-            "glTF/AnimatedCube/AnimatedCube.gltf",
+            "glTF/AnimatedColorsCube.glb",
     };
     for (const auto& path : modelPaths) {
         auto model = std::make_unique<VulkanModel>(mContext.get());
-        if (!model->loadFromFile(mApp->activity->assetManager, path)) {
+        if (!model->loadFromFile(*mAssetProvider, path)) {
             LOGE("Failed to load model: %s", path.c_str());
             return false;
         }
@@ -152,7 +154,7 @@ bool Renderer::initialize() {
 
     // 예시: 큐브를 바닥 위로 살짝 올립니다.
     for (size_t i = 0; i < modelPaths.size(); ++i) {
-        if (modelPaths[i].find("AnimatedCube") != std::string::npos) {
+        if (modelPaths[i].find("AnimatedColorsCube") != std::string::npos) {
             mModelTransforms[i] = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
         }
     }

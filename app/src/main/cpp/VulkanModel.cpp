@@ -1,10 +1,6 @@
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-// [중요] 안드로이드 에셋 로딩 활성화 매크로를 헤더 포함 전에 정의합니다.
-#ifndef TINYGLTF_ANDROID_LOAD_FROM_ASSETS
-#define TINYGLTF_ANDROID_LOAD_FROM_ASSETS
-#endif
 #include "tiny_gltf.h"
 
 #include "VulkanModel.h"
@@ -14,6 +10,13 @@
 #include <glm/gtx/quaternion.hpp>
 
 namespace {
+bool hasGlbExtension(const std::string& path) {
+    if (path.size() < 4) {
+        return false;
+    }
+    return path.substr(path.size() - 4) == ".glb";
+}
+
 void logNodeRecursive(const tinygltf::Model& model, int nodeIndex, int depth) {
     if (nodeIndex < 0 || static_cast<size_t>(nodeIndex) >= model.nodes.size()) {
         return;
@@ -178,24 +181,22 @@ void VulkanModel::loadAnimations(const tinygltf::Model& model) {
     }
 }
 
-bool VulkanModel::loadFromFile(AAssetManager* assetManager, const std::string& filename) {
-    // 1. tinygltf 전역 에셋 매니저 설정 (내부 로더가 사용)
-    tinygltf::asset_manager = assetManager;
+bool VulkanModel::loadFromFile(const AssetProvider& assetProvider, const std::string& filename) {
+    if (!hasGlbExtension(filename)) {
+        LOGE("Only .glb is supported now: %s", filename.c_str());
+        return false;
+    }
 
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err;
     std::string warn;
-
-    // 2. 확장자에 따라 glTF(.gltf)/GLB(.glb) 로드를 분기합니다.
-    bool ret = false;
-    if (filename.size() >= 4 && filename.substr(filename.size() - 4) == ".glb") {
-        ret = loader.LoadBinaryFromFile(&model, &err, &warn, filename);
-    } else {
-        // 이 함수는 filename을 기반으로 base_dir를 자동 계산하며,
-        // TINYGLTF_ANDROID_LOAD_FROM_ASSETS 덕분에 에셋 폴더에서 .bin 파일도 자동으로 찾습니다.
-        ret = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
+    std::vector<uint8_t> bytes;
+    if (!assetProvider.readBinaryFile(filename, bytes)) {
+        LOGE("Failed to read glb asset: %s", filename.c_str());
+        return false;
     }
+    bool ret = loader.LoadBinaryFromMemory(&model, &err, &warn, bytes.data(), bytes.size(), "");
 
     if (!warn.empty()) LOGI("glTF Warning: %s", warn.c_str());
     if (!err.empty()) LOGE("glTF Error: %s", err.c_str());

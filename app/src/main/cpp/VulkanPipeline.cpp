@@ -1,6 +1,7 @@
 #include "VulkanPipeline.h"
 #include "Log.h"
 #include "vulkan_types.h"
+#include <cstring>
 
 namespace {
 VkShaderModule createShaderModule(VkDevice device, const std::vector<uint32_t>& code) {
@@ -36,7 +37,7 @@ VulkanPipeline::~VulkanPipeline() {
 }
 
 bool VulkanPipeline::initialize(VkFormat swapchainImageFormat, VkFormat depthFormat,
-                                AAssetManager* assetManager,
+                                const AssetProvider& assetProvider,
                                 VkDescriptorSetLayout globalSetLayout,
                                 VkDescriptorSetLayout materialSetLayout,
                                 const PipelineConfig& config) {
@@ -53,7 +54,7 @@ bool VulkanPipeline::initialize(VkFormat swapchainImageFormat, VkFormat depthFor
         return false;
     }
     if (!createRenderPass(swapchainImageFormat, depthFormat)) return false;
-    if (!createGraphicsPipeline(assetManager)) return false;
+    if (!createGraphicsPipeline(assetProvider)) return false;
     return true;
 }
 
@@ -136,18 +137,47 @@ bool VulkanPipeline::createRenderPass(VkFormat imageFormat, VkFormat depthFormat
     return true;
 }
 
-bool VulkanPipeline::createGraphicsPipeline(AAssetManager* assetManager) {
+bool VulkanPipeline::createGraphicsPipeline(const AssetProvider& assetProvider) {
+    auto loadSpirv = [&assetProvider](const std::string& path, std::vector<uint32_t>& outWords) -> bool {
+        std::vector<uint8_t> bytes;
+        if (!assetProvider.readBinaryFile(path, bytes)) {
+            LOGE("Failed to load shader asset: %s", path.c_str());
+            return false;
+        }
+        if (bytes.empty() || (bytes.size() % sizeof(uint32_t)) != 0) {
+            LOGE("Invalid SPIR-V size for shader: %s", path.c_str());
+            return false;
+        }
+        outWords.resize(bytes.size() / sizeof(uint32_t));
+        memcpy(outWords.data(), bytes.data(), bytes.size());
+        return true;
+    };
+
     // 1. Shader Modules
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
-    auto vertCode = AssetUtils::loadSpirvFromAssets(assetManager, mConfig.vertShaderPath.c_str());
+    std::vector<uint32_t> vertCode;
+    if (!loadSpirv(mConfig.vertShaderPath, vertCode)) {
+        return false;
+    }
     VkShaderModule vertShader = createShaderModule(mDevice, vertCode);
+    if (vertShader == VK_NULL_HANDLE) {
+        return false;
+    }
     shaderStages.push_back({VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr,
                             0, VK_SHADER_STAGE_VERTEX_BIT, vertShader, "main"});
 
     VkShaderModule fragShader = VK_NULL_HANDLE;
     if (!mConfig.depthOnly && !mConfig.fragShaderPath.empty()) {
-        auto fragCode = AssetUtils::loadSpirvFromAssets(assetManager, mConfig.fragShaderPath.c_str());
+        std::vector<uint32_t> fragCode;
+        if (!loadSpirv(mConfig.fragShaderPath, fragCode)) {
+            vkDestroyShaderModule(mDevice, vertShader, nullptr);
+            return false;
+        }
         fragShader = createShaderModule(mDevice, fragCode);
+        if (fragShader == VK_NULL_HANDLE) {
+            vkDestroyShaderModule(mDevice, vertShader, nullptr);
+            return false;
+        }
         shaderStages.push_back({VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr,
                                 0, VK_SHADER_STAGE_FRAGMENT_BIT, fragShader, "main"});
     }

@@ -16,6 +16,7 @@ FetchContent_MakeAvailable(glm)
 # one used for loading in your Kotlin/Java or AndroidManifest.txt files.
 add_library(mygame SHARED
         main.cpp
+        AndroidAssetProvider.cpp
         DescriptorLayouts.cpp
         GlobalDescriptor.cpp
         Renderer.cpp
@@ -43,9 +44,6 @@ target_compile_definitions(volk PUBLIC
 )
 
 target_include_directories(mygame PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tinygltf)
-target_compile_definitions(mygame PRIVATE
-        TINYGLTF_ANDROID_LOAD_FROM_ASSETS # 안드로이드 에셋 로딩 활성화
-)
 
 target_include_directories(mygame SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include)
 

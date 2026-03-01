@@ -27,8 +27,12 @@ void handle_cmd(android_app *pApp, int32_t cmd) {
             // android_main function and the APP_CMD_TERM_WINDOW handler case.
             if (!pApp->userData) {
                 auto* renderer = new Renderer(pApp);
-                renderer->initialize();
-                pApp->userData = renderer;
+                if (renderer->initialize()) {
+                    pApp->userData = renderer;
+                } else {
+                    LOGE("Renderer initialization failed");
+                    delete renderer;
+                }
             }
             break;
         case APP_CMD_TERM_WINDOW:

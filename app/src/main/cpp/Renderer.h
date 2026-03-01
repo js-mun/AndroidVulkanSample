@@ -19,6 +19,8 @@
 #include "VulkanSwapchain.h"
 #include "VulkanSync.h"
 
+class AssetProvider;
+
 class Renderer {
 public:
     bool mFramebufferResized = false;
@@ -37,6 +39,7 @@ public:
 
 private:
     android_app* mApp;
+    std::unique_ptr<AssetProvider> mAssetProvider;
     std::unique_ptr<VulkanContext> mContext;
     std::unique_ptr<DescriptorLayouts> mDescriptorLayouts;
     std::unique_ptr<VulkanSwapchain> mSwapchain;
