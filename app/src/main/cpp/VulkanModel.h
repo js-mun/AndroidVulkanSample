@@ -32,7 +32,7 @@ public:
     bool initializeDescriptor(VkDescriptorSetLayout materialLayout,
                             uint32_t maxFramesInFlight);
 
-    VkDescriptorSet getDescriptorSet(uint32_t frameIndex) const;
+    VkDescriptorSet getDescriptorSet() const;
 
     // 모든 메시를 순회하며 그리기
     void draw(VkCommandBuffer commandBuffer);

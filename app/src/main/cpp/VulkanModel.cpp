@@ -238,9 +238,9 @@ bool VulkanModel::initializeDescriptor(VkDescriptorSetLayout materialLayout,
     return mDescriptor->initialize(materialLayout, mTextures);
 }
 
-VkDescriptorSet VulkanModel::getDescriptorSet(uint32_t frameIndex) const {
+VkDescriptorSet VulkanModel::getDescriptorSet() const {
     if (!mDescriptor) return VK_NULL_HANDLE;
-    return mDescriptor->getSet(frameIndex);
+    return mDescriptor->getSet();
 }
 
 void VulkanModel::loadTextures(const tinygltf::Model& model) {

@@ -17,14 +17,14 @@ public:
     bool initialize(VkDescriptorSetLayout materialLayout,
                     const std::vector<std::unique_ptr<VulkanTexture>>& textures);
 
-    VkDescriptorSet getSet(uint32_t index) const { return mDescriptorSets[index]; }
+    VkDescriptorSet getSet() const { return mDescriptorSet; }
 
 private:
     VkDevice mDevice;
     uint32_t mMaxFramesInFlight;
 
     VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
-    std::vector<VkDescriptorSet> mDescriptorSets;
+    VkDescriptorSet mDescriptorSet = VK_NULL_HANDLE;
 
     bool createDescriptorPool();
     bool allocateDescriptorSets(VkDescriptorSetLayout layout);

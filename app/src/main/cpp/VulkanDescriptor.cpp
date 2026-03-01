@@ -1,6 +1,5 @@
 #include "VulkanDescriptor.h"
 #include "Log.h"
-#include <array>
 
 VulkanDescriptor::VulkanDescriptor(VkDevice device, uint32_t maxFramesInFlight)
     : mDevice(device), mMaxFramesInFlight(maxFramesInFlight) {}
@@ -22,12 +21,12 @@ bool VulkanDescriptor::initialize(VkDescriptorSetLayout materialLayout,
 bool VulkanDescriptor::createDescriptorPool() {
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSize.descriptorCount = mMaxFramesInFlight;
+    poolSize.descriptorCount = 1;
 
     VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     poolInfo.poolSizeCount = 1;
     poolInfo.pPoolSizes = &poolSize;
-    poolInfo.maxSets = mMaxFramesInFlight;
+    poolInfo.maxSets = 1;
 
     if (vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mDescriptorPool) != VK_SUCCESS) {
         LOGE("Failed to create material descriptor pool");
@@ -37,15 +36,14 @@ bool VulkanDescriptor::createDescriptorPool() {
 }
 
 bool VulkanDescriptor::allocateDescriptorSets(VkDescriptorSetLayout layout) {
-    std::vector<VkDescriptorSetLayout> layouts(mMaxFramesInFlight, layout);
+    VkDescriptorSetLayout materialLayout = layout;
 
     VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     allocInfo.descriptorPool = mDescriptorPool;
-    allocInfo.descriptorSetCount = mMaxFramesInFlight;
-    allocInfo.pSetLayouts = layouts.data();
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &materialLayout;
 
-    mDescriptorSets.resize(mMaxFramesInFlight);
-    if (vkAllocateDescriptorSets(mDevice, &allocInfo, mDescriptorSets.data()) != VK_SUCCESS) {
+    if (vkAllocateDescriptorSets(mDevice, &allocInfo, &mDescriptorSet) != VK_SUCCESS) {
         LOGE("Failed to allocate material descriptor sets");
         return false;
     }
@@ -63,15 +61,13 @@ void VulkanDescriptor::updateDescriptorSets(const std::vector<std::unique_ptr<Vu
         return;
     }
 
-    for (uint32_t i = 0; i < mMaxFramesInFlight; ++i) {
-        VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        write.dstSet = mDescriptorSets[i];
-        write.dstBinding = 1; // material base texture
-        write.dstArrayElement = 0;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.descriptorCount = 1;
-        write.pImageInfo = &imageInfo;
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    write.dstSet = mDescriptorSet;
+    write.dstBinding = 1; // material base texture
+    write.dstArrayElement = 0;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.descriptorCount = 1;
+    write.pImageInfo = &imageInfo;
 
-        vkUpdateDescriptorSets(mDevice, 1, &write, 0, nullptr);
-    }
+    vkUpdateDescriptorSets(mDevice, 1, &write, 0, nullptr);
 }

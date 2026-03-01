@@ -278,7 +278,7 @@ void Renderer::buildFrameGraph() {
             for (size_t i = 0; i < mModels.size(); ++i) {
                 const auto& model = mModels[i];
                 const glm::mat4& modelMatrix = mModelTransforms[i];
-                VkDescriptorSet set = model->getDescriptorSet(mCurrentFrame);
+                VkDescriptorSet set = model->getDescriptorSet();
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                         mMainPipeline->getPipelineLayout(), 1, 1, &set, 0, nullptr);
 
