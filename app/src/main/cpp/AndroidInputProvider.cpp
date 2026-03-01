@@ -24,6 +24,9 @@ void AndroidInputProvider::processInput(Renderer& renderer) {
         return;
     }
 
+    const auto now = std::chrono::steady_clock::now();
+    constexpr auto kSingleTouchCooldown = std::chrono::milliseconds(100);
+
     auto* inputBuffer = android_app_swap_input_buffers(mApp);
     if (!inputBuffer) {
         return;
@@ -35,6 +38,8 @@ void AndroidInputProvider::processInput(Renderer& renderer) {
         const uint32_t pointerCount = motionEvent.pointerCount;
 
         if (pointerCount >= 2) {
+            mWasPinching = true;
+            mLastPinchTime = now;
             const float x0 = GameActivityPointerAxes_getX(&motionEvent.pointers[0]);
             const float y0 = GameActivityPointerAxes_getY(&motionEvent.pointers[0]);
             const float x1 = GameActivityPointerAxes_getX(&motionEvent.pointers[1]);
@@ -50,6 +55,22 @@ void AndroidInputProvider::processInput(Renderer& renderer) {
         } else if (pointerCount == 1) {
             const float x = GameActivityPointerAxes_getX(&motionEvent.pointers[0]);
             const float y = GameActivityPointerAxes_getY(&motionEvent.pointers[0]);
+
+            // 핀치가 끝나고 1손가락으로 전환되는 첫 프레임은 드래그 delta를 무시해
+            // 카메라가 갑자기 튀는 현상을 막습니다.
+            if (mWasPinching) {
+                mLastX = x;
+                mLastY = y;
+                mWasPinching = false;
+                continue;
+            }
+
+            if ((now - mLastPinchTime) < kSingleTouchCooldown) {
+                mLastX = x;
+                mLastY = y;
+                continue;
+            }
+
             switch (action) {
                 case AMOTION_EVENT_ACTION_DOWN:
                     mLastX = x;
@@ -73,4 +94,3 @@ void AndroidInputProvider::processInput(Renderer& renderer) {
     android_app_clear_motion_events(inputBuffer);
     android_app_clear_key_events(inputBuffer);
 }
-

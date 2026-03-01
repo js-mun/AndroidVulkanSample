@@ -55,6 +55,7 @@ target_link_libraries(mygame_core PUBLIC volk glm::glm dl)
 add_executable(mygame_desktop
         desktop_main.cpp
         DesktopAssetProvider.cpp
+        DesktopInputProvider.cpp
         GlfwSurfaceProvider.cpp
 )
 

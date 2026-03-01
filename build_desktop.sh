@@ -19,7 +19,11 @@ case "${MODE}" in
     ;;
 esac
 
-cmake -S "${ROOT_DIR}/desktop" -B "${BUILD_DIR}" -G Ninja -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+# First configure only when build files do not exist.
+if [[ ! -f "${BUILD_DIR}/build.ninja" ]]; then
+  cmake -S "${ROOT_DIR}/desktop" -B "${BUILD_DIR}" -G Ninja -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+fi
+
 cmake --build "${BUILD_DIR}" -j
 
 echo "Desktop build complete (${MODE})."

@@ -3,6 +3,7 @@
 #include "IInputProvider.h"
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <chrono>
 
 class AndroidInputProvider final : public IInputProvider {
 public:
@@ -15,5 +16,6 @@ private:
     float mLastX = 0.0f;
     float mLastY = 0.0f;
     float mLastPinchDist = 0.0f;
+    bool mWasPinching = false;
+    std::chrono::steady_clock::time_point mLastPinchTime{};
 };
-

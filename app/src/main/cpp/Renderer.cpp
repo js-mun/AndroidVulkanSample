@@ -451,11 +451,13 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
 }
 
 void Renderer::handleTouchDrag(float dx, float dy) {
-    float sensitivity = 0.00003f;
+    // AndroidInputProvider에서 move delta를 프레임별 증분으로 넘기므로
+    // 누적 델타 기준보다 더 큰 감도가 필요합니다.
+    float sensitivity = 0.001f;
     mCamera->rotate(dx * sensitivity, dy * sensitivity);
 }
 
 void Renderer::handlePinchZoom(float delta) {
-    float zoomSensitivity = 0.01f;
+    float zoomSensitivity = 0.03f;
     mCamera->zoom(delta * zoomSensitivity);
 }
