@@ -127,6 +127,7 @@ bool Renderer::initialize() {
     mCamera = std::make_unique<Camera>();
 
     mRenderGraph = std::make_unique<RenderGraph>();
+    buildFrameGraph();
 
     LOGI("Vulkan Initialization Wrap-up Successful!");
 
@@ -141,11 +142,14 @@ Renderer::~Renderer() {
 }
 
 void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
-    buildFrameGraph(imageIndex);
+    mActiveImageIndex = imageIndex;
+    if (!mFrameGraphReady) {
+        buildFrameGraph();
+    }
     executeFrameGraph(commandBuffer);
 }
 
-void Renderer::buildFrameGraph(uint32_t imageIndex) {
+void Renderer::buildFrameGraph() {
     mRenderGraph->reset();
 
     // 1) Shadow Pass
@@ -213,11 +217,11 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
         "MainScene",
         {"shadow_depth"},
         {"swapchain_color", "swapchain_depth"},
-        [this, imageIndex](VkCommandBuffer commandBuffer) {
+        [this](VkCommandBuffer commandBuffer) {
             VkRenderPassBeginInfo renderPassInfo{};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
             renderPassInfo.renderPass = mMainPipeline->getRenderPass();
-            renderPassInfo.framebuffer = mSwapchain->getFramebuffers()[imageIndex];
+            renderPassInfo.framebuffer = mSwapchain->getFramebuffers()[mActiveImageIndex];
             renderPassInfo.renderArea.offset = {0, 0};
             renderPassInfo.renderArea.extent = mSwapchain->getExtent();
 
@@ -268,7 +272,10 @@ void Renderer::buildFrameGraph(uint32_t imageIndex) {
 
     if (!mRenderGraph->compile({"swapchain_color", "swapchain_depth"})) {
         LOGE("Failed to compile Render Graph");
+        mFrameGraphReady = false;
+        return;
     }
+    mFrameGraphReady = true;
 }
 
 void Renderer::executeFrameGraph(VkCommandBuffer commandBuffer) {
@@ -286,6 +293,7 @@ void Renderer::render() {
             model->updateShadowMap(mShadowResources->getDepthView(),
                     mShadowResources->getSampler());
         }
+        mFrameGraphReady = false;
         return;
     }
 
@@ -311,6 +319,7 @@ void Renderer::render() {
             model->updateShadowMap(mShadowResources->getDepthView(),
                     mShadowResources->getSampler());
         }
+        mFrameGraphReady = false;
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         LOGE("Failed to acquire swapchain image!");
@@ -367,6 +376,7 @@ void Renderer::render() {
             model->updateShadowMap(mShadowResources->getDepthView(),
                     mShadowResources->getSampler());
         }
+        mFrameGraphReady = false;
     }
 
     // 다음 프레임 인덱스로 교체

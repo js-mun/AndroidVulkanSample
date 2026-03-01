@@ -30,7 +30,7 @@ public:
     void handleTouchDrag(float dx, float dy);
     void handlePinchZoom(float delta);
 
-    void buildFrameGraph(uint32_t imageIndex);
+    void buildFrameGraph();
     void executeFrameGraph(VkCommandBuffer commandBuffer);
 
 private:
@@ -49,6 +49,8 @@ private:
     std::unique_ptr<Camera> mCamera;
 
     std::unique_ptr<RenderGraph> mRenderGraph;
+    uint32_t mActiveImageIndex = 0;
+    bool mFrameGraphReady = false;
 
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;
