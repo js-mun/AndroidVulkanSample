@@ -3,7 +3,7 @@
 #include "Log.h"
 
 Camera::Camera() : mVPMatrix(1.0f) {
-    mYaw = glm::radians(45.0f);
+    mYaw = glm::radians(210.0f);
     mPitch = glm::radians(30.0f);
     mRadius = 15.0f;
 }
