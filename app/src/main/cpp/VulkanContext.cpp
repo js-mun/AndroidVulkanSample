@@ -6,6 +6,36 @@
 #include "VulkanContext.h"
 #include "Log.h"
 
+#include <cstring>
+
+namespace {
+#if defined(NDEBUG)
+constexpr bool kEnableValidationLayers = false;
+#else
+constexpr bool kEnableValidationLayers = true;
+#endif
+
+constexpr const char* kValidationLayers[] = {
+        "VK_LAYER_KHRONOS_validation"
+};
+
+VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+        VkDebugUtilsMessageTypeFlagsEXT messageType,
+        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+        void* pUserData) {
+    (void)messageType;
+    (void)pUserData;
+
+    if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        LOGE("[VVL] %s", pCallbackData->pMessage);
+    } else {
+        LOGI("[VVL] %s", pCallbackData->pMessage);
+    }
+    return VK_FALSE;
+}
+} // namespace
+
 VulkanContext::VulkanContext(struct android_app* app) : mApp(app) {
 }
 
@@ -20,6 +50,7 @@ VulkanContext::~VulkanContext() {
         vkDestroyDevice(mDevice, nullptr);
     }
     if (mInstance != VK_NULL_HANDLE) {
+        destroyDebugMessenger();
         if (mSurface != VK_NULL_HANDLE) {
             vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
         }
@@ -29,6 +60,7 @@ VulkanContext::~VulkanContext() {
 
 bool VulkanContext::initialize() {
     if (!createInstance()) return false;
+    if (!setupDebugMessenger()) return false;
     if (!createSurface()) return false;
     if (!selectPhysicalDevice()) return false;
     if (!createLogicalDevice()) return false;
@@ -85,16 +117,33 @@ bool VulkanContext::createInstance() {
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_1;
 
-    const char* extensions[] = {
-            VK_KHR_SURFACE_EXTENSION_NAME,
-            VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
-    };
+    const bool layerSupported = checkValidationLayerSupport();
+    const bool enableValidation = kEnableValidationLayers && layerSupported;
+    LOGI("Validation request=%d, layerSupported=%d, enableValidation=%d",
+         kEnableValidationLayers ? 1 : 0,
+         layerSupported ? 1 : 0,
+         enableValidation ? 1 : 0);
+    auto extensions = getRequiredInstanceExtensions(enableValidation);
 
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledExtensionCount = 2;
-    createInfo.ppEnabledExtensionNames = extensions;
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+    createInfo.ppEnabledExtensionNames = extensions.data();
+
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    if (enableValidation) {
+        createInfo.enabledLayerCount = 1;
+        createInfo.ppEnabledLayerNames = kValidationLayers;
+        populateDebugMessengerCreateInfo(debugCreateInfo);
+        createInfo.pNext = &debugCreateInfo;
+    } else {
+        createInfo.enabledLayerCount = 0;
+        createInfo.pNext = nullptr;
+        if (kEnableValidationLayers) {
+            LOGI("Validation layers requested, but not available on this device.");
+        }
+    }
 
     if (vkCreateInstance(&createInfo, nullptr, &mInstance) != VK_SUCCESS) {
         LOGE("Failed to create vkInstance");
@@ -103,6 +152,94 @@ bool VulkanContext::createInstance() {
 
     volkLoadInstance(mInstance);
     return true;
+}
+
+bool VulkanContext::setupDebugMessenger() {
+    if (!kEnableValidationLayers) {
+        LOGI("Validation disabled by build configuration (NDEBUG).");
+        return true;
+    }
+    if (!checkValidationLayerSupport()) {
+        LOGI("Validation layers are not available. Debug messenger is disabled.");
+        return true;
+    }
+
+    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+    populateDebugMessengerCreateInfo(createInfo);
+
+    auto createFn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+            vkGetInstanceProcAddr(mInstance, "vkCreateDebugUtilsMessengerEXT"));
+    if (!createFn) {
+        LOGE("vkCreateDebugUtilsMessengerEXT not found");
+        return false;
+    }
+
+    if (createFn(mInstance, &createInfo, nullptr, &mDebugMessenger) != VK_SUCCESS) {
+        LOGE("Failed to create debug messenger");
+        return false;
+    }
+    LOGI("Validation enabled. Debug messenger created.");
+    return true;
+}
+
+void VulkanContext::destroyDebugMessenger() {
+    if (mDebugMessenger == VK_NULL_HANDLE) {
+        return;
+    }
+
+    auto destroyFn = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+            vkGetInstanceProcAddr(mInstance, "vkDestroyDebugUtilsMessengerEXT"));
+    if (destroyFn) {
+        destroyFn(mInstance, mDebugMessenger, nullptr);
+    }
+    mDebugMessenger = VK_NULL_HANDLE;
+}
+
+bool VulkanContext::checkValidationLayerSupport() const {
+    uint32_t layerCount = 0;
+    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    std::vector<VkLayerProperties> availableLayers(layerCount);
+    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+    for (const char* requestedLayer : kValidationLayers) {
+        bool found = false;
+        for (const auto& layer : availableLayers) {
+            if (strcmp(requestedLayer, layer.layerName) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            LOGI("Missing validation layer: %s", requestedLayer);
+            return false;
+        }
+    }
+    LOGI("All requested validation layers are available.");
+    return true;
+}
+
+std::vector<const char*> VulkanContext::getRequiredInstanceExtensions(bool enableValidation) const {
+    std::vector<const char*> extensions = {
+            VK_KHR_SURFACE_EXTENSION_NAME,
+            VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
+    };
+    if (enableValidation) {
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+    return extensions;
+}
+
+void VulkanContext::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) const {
+    createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.messageSeverity =
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType =
+            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.pfnUserCallback = debugCallback;
 }
 
 bool VulkanContext::createSurface() {

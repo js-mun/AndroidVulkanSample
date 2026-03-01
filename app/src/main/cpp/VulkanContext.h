@@ -4,6 +4,7 @@
 #include "vk_mem_alloc.h"
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <string>
 #include <vector>
 
 class VulkanContext {
@@ -52,11 +53,17 @@ private:
     uint32_t mGraphicsQueueFamilyIndex = 0;
 
     VkCommandPool mTransferCommandPool = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerEXT mDebugMessenger = VK_NULL_HANDLE;
 
     // VMA
     VmaAllocator mAllocator = VK_NULL_HANDLE;
 
     bool createInstance();
+    bool setupDebugMessenger();
+    void destroyDebugMessenger();
+    bool checkValidationLayerSupport() const;
+    std::vector<const char*> getRequiredInstanceExtensions(bool enableValidation) const;
+    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) const;
     bool createSurface();
     bool selectPhysicalDevice();
     bool createLogicalDevice();
