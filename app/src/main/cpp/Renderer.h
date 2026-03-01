@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Camera.h"
+#include "DescriptorLayouts.h"
 #include "GlobalDescriptor.h"
 #include "RenderGraph.h"
 #include "ShadowResources.h"
@@ -37,6 +38,7 @@ public:
 private:
     android_app* mApp;
     std::unique_ptr<VulkanContext> mContext;
+    std::unique_ptr<DescriptorLayouts> mDescriptorLayouts;
     std::unique_ptr<VulkanSwapchain> mSwapchain;
     std::unique_ptr<VulkanPipeline> mMainPipeline;
     std::unique_ptr<VulkanPipeline> mShadowPipeline;

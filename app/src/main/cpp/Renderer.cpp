@@ -28,6 +28,12 @@ bool Renderer::initialize() {
         return false;
     }
 
+    mDescriptorLayouts = std::make_unique<DescriptorLayouts>(mContext->getDevice());
+    if (!mDescriptorLayouts->initialize()) {
+        LOGE("Failed to initialize descriptor layouts");
+        return false;
+    }
+
     PipelineConfig mainConfig;
     mainConfig.vertShaderPath = "shaders/main.vert.spv";
     mainConfig.fragShaderPath = "shaders/main.frag.spv";
@@ -38,7 +44,10 @@ bool Renderer::initialize() {
 
     mMainPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
     if (!mMainPipeline->initialize(mSwapchain->getImageFormat(), mSwapchain->getDepthFormat(),
-                               mApp->activity->assetManager, mainConfig)) {
+                               mApp->activity->assetManager,
+                               mDescriptorLayouts->getGlobalSetLayout(),
+                               mDescriptorLayouts->getMaterialSetLayout(),
+                               mainConfig)) {
         LOGE("Failed to initialize Vulkan Pipeline");
         return false;
     }
@@ -57,7 +66,10 @@ bool Renderer::initialize() {
 
     mShadowPipeline = std::make_unique<VulkanPipeline>(mContext->getDevice());
     if (!mShadowPipeline->initialize(mSwapchain->getImageFormat(), 
-            mSwapchain->getDepthFormat(), mApp->activity->assetManager, shadowConfig)) {
+            mSwapchain->getDepthFormat(), mApp->activity->assetManager,
+            mDescriptorLayouts->getGlobalSetLayout(),
+            mDescriptorLayouts->getMaterialSetLayout(),
+            shadowConfig)) {
         LOGE("Failed to initialize Vulkan Pipeline");
         return false;
     }
@@ -97,7 +109,7 @@ bool Renderer::initialize() {
     mGlobalDescriptor = std::make_unique<GlobalDescriptor>(
             mContext->getDevice(), MAX_FRAMES_IN_FLIGHT);
     if (!mGlobalDescriptor->initialize(
-            mMainPipeline->getGlobalSetLayout(),
+            mDescriptorLayouts->getGlobalSetLayout(),
             mUniformBuffers,
             mShadowResources->getDepthView(),
             mShadowResources->getSampler())) {
@@ -116,7 +128,7 @@ bool Renderer::initialize() {
             LOGE("Failed to load model: %s", path.c_str());
             return false;
         }
-        if (!model->initializeDescriptor(mMainPipeline->getMaterialSetLayout(),
+        if (!model->initializeDescriptor(mDescriptorLayouts->getMaterialSetLayout(),
                 MAX_FRAMES_IN_FLIGHT)) {
             LOGE("Failed to initialize model descriptor: %s", path.c_str());
             return false;
