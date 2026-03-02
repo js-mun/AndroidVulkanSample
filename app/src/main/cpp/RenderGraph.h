@@ -39,11 +39,16 @@ public:
 
     bool compile(const std::vector<std::string>& externalResources = {});
     void execute(VkCommandBuffer cmd);
+    bool tryGetResourceLayout(const std::string& name, VkImageLayout& outLayout) const;
 
 private:
     std::vector<Pass> mPasses;
     std::unordered_map<std::string, Resource> mResources;
 
-    bool transitionResource(VkCommandBuffer cmd, const std::string& name, VkImageLayout newLayout);
+    bool transitionResource(VkCommandBuffer cmd,
+                            const std::string& passName,
+                            const std::string& usageKind,
+                            const std::string& name,
+                            VkImageLayout newLayout);
     void applyPostPassLayouts(const Pass& pass);
 };

@@ -51,6 +51,8 @@ target_include_directories(mygame SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thi
 
 target_compile_definitions(mygame PRIVATE
         DEBUG_LOG=0
+        DEBUG_LOG_VERBOSE=0
+        DEBUG_LOG_RG=0
         DEBUG_LOG_GLTF=0
 )
 

@@ -5,6 +5,10 @@
 #include <array>
 #include <vector>
 
+#ifndef DEBUG_LOG_RG
+#define DEBUG_LOG_RG DEBUG_LOG
+#endif
+
 Renderer::Renderer(ISurfaceProvider& surfaceProvider, IAssetProvider& assetProvider)
         : mSurfaceProvider(surfaceProvider), mAssetProvider(assetProvider) {
 }
@@ -338,10 +342,21 @@ void Renderer::buildFrameGraph() {
 }
 
 void Renderer::executeFrameGraph(VkCommandBuffer commandBuffer) {
+    if (DEBUG_LOG_RG) {
+        LOGV("[RG] Frame execute: currentFrame=%u activeImageIndex=%u", mCurrentFrame, mActiveImageIndex);
+    }
     mRenderGraph->execute(commandBuffer);
-    mShadowDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    mSwapchainDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    mSwapchainColorLayouts[mActiveImageIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (mRenderGraph->tryGetResourceLayout("shadow_depth", layout)) {
+        mShadowDepthLayout = layout;
+    }
+    if (mRenderGraph->tryGetResourceLayout("swapchain_depth", layout)) {
+        mSwapchainDepthLayout = layout;
+    }
+    if (mRenderGraph->tryGetResourceLayout("swapchain_color", layout)) {
+        mSwapchainColorLayouts[mActiveImageIndex] = layout;
+    }
 }
 
 void Renderer::render() {
