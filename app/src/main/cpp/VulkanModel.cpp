@@ -11,6 +11,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+#ifndef DEBUG_LOG_GLTF
+#define DEBUG_LOG_GLTF 0
+#endif
+
 namespace {
 bool hasGlbExtension(const std::string& path) {
     if (path.size() < 4) {
@@ -27,7 +31,7 @@ void logNodeRecursive(const tinygltf::Model& model, int nodeIndex, int depth) {
     const auto& node = model.nodes[nodeIndex];
     std::string indent(static_cast<size_t>(depth) * 2, ' ');
 
-    if (DEBUG_LOG) {
+    if (DEBUG_LOG_GLTF) {
         LOGI("[glTF] %sNode[%d] name='%s' mesh=%d children=%zu matrixSize=%zu",
                 indent.c_str(),
                 nodeIndex,
@@ -38,7 +42,7 @@ void logNodeRecursive(const tinygltf::Model& model, int nodeIndex, int depth) {
     }
 
     if (!node.translation.empty()) {
-        if (DEBUG_LOG) {
+        if (DEBUG_LOG_GLTF) {
             LOGI("[glTF] %s  translation=(%.3f, %.3f, %.3f)",
                 indent.c_str(),
                 static_cast<float>(node.translation[0]),
@@ -47,7 +51,7 @@ void logNodeRecursive(const tinygltf::Model& model, int nodeIndex, int depth) {
         }
     }
     if (!node.rotation.empty()) {
-        if (DEBUG_LOG) {
+        if (DEBUG_LOG_GLTF) {
             LOGI("[glTF] %s  rotation(quat xyzw)=(%.3f, %.3f, %.3f, %.3f)",
                 indent.c_str(),
                 static_cast<float>(node.rotation[0]),
@@ -57,7 +61,7 @@ void logNodeRecursive(const tinygltf::Model& model, int nodeIndex, int depth) {
         }
     }
     if (!node.scale.empty()) {
-        if (DEBUG_LOG) {
+        if (DEBUG_LOG_GLTF) {
             LOGI("[glTF] %s  scale=(%.3f, %.3f, %.3f)",
                 indent.c_str(),
                 static_cast<float>(node.scale[0]),
@@ -66,7 +70,7 @@ void logNodeRecursive(const tinygltf::Model& model, int nodeIndex, int depth) {
         }
     }
     if (!node.matrix.empty()) {
-        if (DEBUG_LOG) {
+        if (DEBUG_LOG_GLTF) {
             LOGI("[glTF] %s  matrix[0..3]=(%.3f, %.3f, %.3f, %.3f)",
                 indent.c_str(),
                 static_cast<float>(node.matrix[0]),
@@ -281,6 +285,21 @@ void VulkanModel::updateNodeWorldCache(float timeSec) {
     for (int root : mSceneRootNodes) {
         buildNodeWorldRecursive(root, glm::mat4(1.0f), timeSec);
     }
+
+    if (DEBUG_LOG_GLTF) {
+        static int sAnimSampleLogCount = 0;
+        if (sAnimSampleLogCount < 5) {
+            LOGI("[glTF][AnimSample] time=%.3f roots=%zu", timeSec, mSceneRootNodes.size());
+            for (const auto& [node, _] : mNodeRotationAnims) {
+                const glm::vec3 t = sampleNodeTranslation(node, timeSec);
+                const glm::quat r = sampleNodeRotation(node, timeSec);
+                const glm::vec3 s = sampleNodeScale(node, timeSec);
+                LOGI("[glTF][AnimSample] node=%d T=(%.3f, %.3f, %.3f) R=(%.3f, %.3f, %.3f, %.3f) S=(%.3f, %.3f, %.3f)",
+                     node, t.x, t.y, t.z, r.x, r.y, r.z, r.w, s.x, s.y, s.z);
+            }
+            sAnimSampleLogCount++;
+        }
+    }
 }
 
 void VulkanModel::extractNodeBaseTransforms(const tinygltf::Model& model) {
@@ -326,6 +345,16 @@ void VulkanModel::extractNodeBaseTransforms(const tinygltf::Model& model) {
             }
         }
     }
+
+    if (DEBUG_LOG_GLTF) {
+        LOGI("[glTF][Structure] Extracted node base transforms: nodes=%zu", n);
+        for (size_t i = 0; i < n; ++i) {
+            LOGI("[glTF][Structure] node=%zu parent=%d useMatrix=%d baseT=(%.3f, %.3f, %.3f) baseS=(%.3f, %.3f, %.3f)",
+                 i, mNodeParents[i], mNodeUseMatrix[i] ? 1 : 0,
+                 mNodeBaseTranslation[i].x, mNodeBaseTranslation[i].y, mNodeBaseTranslation[i].z,
+                 mNodeBaseScale[i].x, mNodeBaseScale[i].y, mNodeBaseScale[i].z);
+        }
+    }
 }
 
 void VulkanModel::loadAnimations(const tinygltf::Model& model) {
@@ -335,6 +364,10 @@ void VulkanModel::loadAnimations(const tinygltf::Model& model) {
     if (model.animations.empty()) return;
 
     const auto& anim = model.animations[0];
+    if (DEBUG_LOG_GLTF) {
+        LOGI("[glTF][Anim] animations=%zu (use animation[0]) channels=%zu samplers=%zu",
+             model.animations.size(), anim.channels.size(), anim.samplers.size());
+    }
     for (const auto& channel : anim.channels) {
         if (channel.target_node < 0 ||
             static_cast<size_t>(channel.target_node) >= model.nodes.size()) {
@@ -366,6 +399,26 @@ void VulkanModel::loadAnimations(const tinygltf::Model& model) {
                 data.rotations.push_back(glm::normalize(glm::quat(w, x, y, z)));
             }
             mNodeRotationAnims[channel.target_node] = std::move(data);
+            if (DEBUG_LOG_GLTF) {
+                const auto& stored = mNodeRotationAnims[channel.target_node];
+                const float duration = stored.times.empty() ? 0.0f : stored.times.back();
+                LOGI("[glTF][Anim] node=%d path=rotation keys=%zu duration=%.3f",
+                     channel.target_node, stored.times.size(), duration);
+                if (!stored.times.empty() && !stored.rotations.empty()) {
+                    const size_t first = 0;
+                    const size_t mid = stored.times.size() / 2;
+                    const size_t last = stored.times.size() - 1;
+                    const auto& q0 = stored.rotations[first];
+                    const auto& q1 = stored.rotations[mid];
+                    const auto& q2 = stored.rotations[last];
+                    LOGI("[glTF][AnimKey] node=%d rotation first(t=%.3f,q=(%.3f,%.3f,%.3f,%.3f))",
+                         channel.target_node, stored.times[first], q0.x, q0.y, q0.z, q0.w);
+                    LOGI("[glTF][AnimKey] node=%d rotation mid(t=%.3f,q=(%.3f,%.3f,%.3f,%.3f))",
+                         channel.target_node, stored.times[mid], q1.x, q1.y, q1.z, q1.w);
+                    LOGI("[glTF][AnimKey] node=%d rotation last(t=%.3f,q=(%.3f,%.3f,%.3f,%.3f))",
+                         channel.target_node, stored.times[last], q2.x, q2.y, q2.z, q2.w);
+                }
+            }
         } else if (channel.target_path == "translation" || channel.target_path == "scale") {
             Vec3AnimData data;
             data.times.assign(times, times + inputAccessor.count);
@@ -378,10 +431,55 @@ void VulkanModel::loadAnimations(const tinygltf::Model& model) {
             }
             if (channel.target_path == "translation") {
                 mNodeTranslationAnims[channel.target_node] = std::move(data);
+                if (DEBUG_LOG_GLTF) {
+                    const auto& stored = mNodeTranslationAnims[channel.target_node];
+                    const float duration = stored.times.empty() ? 0.0f : stored.times.back();
+                    LOGI("[glTF][Anim] node=%d path=translation keys=%zu duration=%.3f",
+                         channel.target_node, stored.times.size(), duration);
+                    if (!stored.times.empty() && !stored.values.empty()) {
+                        const size_t first = 0;
+                        const size_t mid = stored.times.size() / 2;
+                        const size_t last = stored.times.size() - 1;
+                        const auto& v0 = stored.values[first];
+                        const auto& v1 = stored.values[mid];
+                        const auto& v2 = stored.values[last];
+                        LOGI("[glTF][AnimKey] node=%d translation first(t=%.3f,v=(%.3f,%.3f,%.3f))",
+                             channel.target_node, stored.times[first], v0.x, v0.y, v0.z);
+                        LOGI("[glTF][AnimKey] node=%d translation mid(t=%.3f,v=(%.3f,%.3f,%.3f))",
+                             channel.target_node, stored.times[mid], v1.x, v1.y, v1.z);
+                        LOGI("[glTF][AnimKey] node=%d translation last(t=%.3f,v=(%.3f,%.3f,%.3f))",
+                             channel.target_node, stored.times[last], v2.x, v2.y, v2.z);
+                    }
+                }
             } else {
                 mNodeScaleAnims[channel.target_node] = std::move(data);
+                if (DEBUG_LOG_GLTF) {
+                    const auto& stored = mNodeScaleAnims[channel.target_node];
+                    const float duration = stored.times.empty() ? 0.0f : stored.times.back();
+                    LOGI("[glTF][Anim] node=%d path=scale keys=%zu duration=%.3f",
+                         channel.target_node, stored.times.size(), duration);
+                    if (!stored.times.empty() && !stored.values.empty()) {
+                        const size_t first = 0;
+                        const size_t mid = stored.times.size() / 2;
+                        const size_t last = stored.times.size() - 1;
+                        const auto& v0 = stored.values[first];
+                        const auto& v1 = stored.values[mid];
+                        const auto& v2 = stored.values[last];
+                        LOGI("[glTF][AnimKey] node=%d scale first(t=%.3f,v=(%.3f,%.3f,%.3f))",
+                             channel.target_node, stored.times[first], v0.x, v0.y, v0.z);
+                        LOGI("[glTF][AnimKey] node=%d scale mid(t=%.3f,v=(%.3f,%.3f,%.3f))",
+                             channel.target_node, stored.times[mid], v1.x, v1.y, v1.z);
+                        LOGI("[glTF][AnimKey] node=%d scale last(t=%.3f,v=(%.3f,%.3f,%.3f))",
+                             channel.target_node, stored.times[last], v2.x, v2.y, v2.z);
+                    }
+                }
             }
         }
+    }
+
+    if (DEBUG_LOG_GLTF) {
+        LOGI("[glTF][Anim] summary: rotationNodes=%zu translationNodes=%zu scaleNodes=%zu",
+             mNodeRotationAnims.size(), mNodeTranslationAnims.size(), mNodeScaleAnims.size());
     }
 }
 
@@ -411,7 +509,7 @@ bool VulkanModel::loadFromFile(const IAssetProvider& assetProvider, const std::s
     LOGI("Successfully loaded glTF model: %s", filename.c_str());
 
     // Node/scene transform 정보 로깅: 실제 월드 변환(TRS/matrix) 확인용
-    if (DEBUG_LOG) {
+    if (DEBUG_LOG_GLTF) {
         LOGI("[glTF] scenes=%zu defaultScene=%d nodes=%zu meshes=%zu materials=%zu",
             model.scenes.size(), model.defaultScene, model.nodes.size(),
             model.meshes.size(), model.materials.size());
@@ -422,7 +520,7 @@ bool VulkanModel::loadFromFile(const IAssetProvider& assetProvider, const std::s
     }
     if (sceneIndex >= 0 && static_cast<size_t>(sceneIndex) < model.scenes.size()) {
         const auto& scene = model.scenes[sceneIndex];
-        if (DEBUG_LOG) {
+        if (DEBUG_LOG_GLTF) {
             LOGI("[glTF] Scene[%d] rootNodes=%zu", sceneIndex, scene.nodes.size());
         }
         for (int rootNode : scene.nodes) {
@@ -455,7 +553,7 @@ void VulkanModel::loadTextures(const tinygltf::Model& model) {
         // tinygltf는 이미지를 로드하여 image.image(vector<unsigned char>)에 담아둡니다.
         if (texture->loadFromMemory(image.image.data(), image.width, image.height, VK_FORMAT_R8G8B8A8_SRGB)) {
             mTextures.push_back(std::move(texture));
-            if (DEBUG_LOG) {
+            if (DEBUG_LOG_GLTF) {
                 LOGI("Loaded glTF texture: %s (%dx%d)", image.name.c_str(), 
                         image.width, image.height);
             }
@@ -469,7 +567,7 @@ void VulkanModel::loadTextures(const tinygltf::Model& model) {
         auto fallback = std::make_unique<VulkanTexture>(mContext);
         if (fallback->loadFromMemory(kWhitePixel.data(), 1, 1, VK_FORMAT_R8G8B8A8_SRGB)) {
             mTextures.push_back(std::move(fallback));
-            if (DEBUG_LOG) LOGI("Created fallback white texture for non-textured model");
+            if (DEBUG_LOG_GLTF) LOGI("Created fallback white texture for non-textured model");
         } else {
             LOGE("Failed to create fallback white texture");
         }
@@ -493,6 +591,11 @@ void VulkanModel::processModel(const tinygltf::Model& model) {
     for (int rootNode : scene.nodes) {
         mSceneRootNodes.push_back(rootNode);
         processNode(model, rootNode, -1);
+    }
+
+    if (DEBUG_LOG_GLTF) {
+        LOGI("[glTF][Structure] Scene[%d] roots=%zu primitiveDraws=%zu",
+             sceneIndex, mSceneRootNodes.size(), mPrimitiveDraws.size());
     }
 }
 
@@ -591,7 +694,7 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
             // glTF는 VEC3/VEC4 + 다양한 componentType을 허용합니다.
             vertices[i].color = readNormalizedColor(src, colorAccessor.componentType, componentCount) * baseColorFactor;
         }
-        if (DEBUG_LOG) LOGI("Extracted COLOR_0 data for %zu vertices", colorAccessor.count);
+        if (DEBUG_LOG_GLTF) LOGI("Extracted COLOR_0 data for %zu vertices", colorAccessor.count);
     }
 
     // 1.2 NORMAL 추출
@@ -605,7 +708,7 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
             const float* n = reinterpret_cast<const float*>(normalData + i * stride);
             vertices[i].normal = glm::normalize(glm::vec3(n[0], n[1], n[2]));
         }
-        if (DEBUG_LOG) LOGI("Extracted NORMAL data for %zu vertices", normalAccessor.count);
+        if (DEBUG_LOG_GLTF) LOGI("Extracted NORMAL data for %zu vertices", normalAccessor.count);
     }
 
     // 1.3 TEXCOORD_0 추출
@@ -619,7 +722,7 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
             const float* uvs = reinterpret_cast<const float*>(uvData + i * stride);
             vertices[i].texCoord = glm::vec2(uvs[0], uvs[1]);
         }
-        if (DEBUG_LOG) LOGI("Extracted TEXCOORD_0 data for %zu vertices", uvAccessor.count);
+        if (DEBUG_LOG_GLTF) LOGI("Extracted TEXCOORD_0 data for %zu vertices", uvAccessor.count);
     }
 
     // 2. INDICES 추출
@@ -647,23 +750,27 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
     drawItem.mesh = std::make_unique<VulkanMesh>(mContext, vertices, indices);
     drawItem.nodeIndex = nodeIndex;
     mPrimitiveDraws.push_back(std::move(drawItem));
+    if (DEBUG_LOG_GLTF) {
+        LOGI("[glTF][Structure] primitive->node mapped: drawIndex=%zu node=%d vertices=%zu indices=%zu material=%d",
+             mPrimitiveDraws.size() - 1, nodeIndex, vertices.size(), indices.size(), primitive.material);
+    }
 
     // Debugging: transformed vertex 확인
-    if (DEBUG_LOG) {
+    if (DEBUG_LOG_GLTF) {
         LOGV("Mesh Primitive: Vertex Count = %zu, Index Count = %zu", vertices.size(), indices.size());
         if (!vertices.empty()) {
             LOGI("[glTF] local v0=(%.3f, %.3f, %.3f)",
                 vertices[0].pos.x, vertices[0].pos.y, vertices[0].pos.z);
         }
-    for (size_t i = 0; i < std::min(vertices.size(), size_t(10)); ++i) {
-        LOGV("  Vertex[%zu]: pos(%.2f, %.2f, %.2f), color(%.2f, %.2f, %.2f), uv(%.2f, %.2f), n(%.2f, %.2f, %.2f)",
-             i,
-             vertices[i].pos.x, vertices[i].pos.y, vertices[i].pos.z,
-             vertices[i].color.r, vertices[i].color.g, vertices[i].color.b,
-             vertices[i].texCoord.x, vertices[i].texCoord.y,
-             vertices[i].normal.x, vertices[i].normal.y, vertices[i].normal.z);
+        for (size_t i = 0; i < std::min(vertices.size(), size_t(10)); ++i) {
+            LOGV("  Vertex[%zu]: pos(%.2f, %.2f, %.2f), color(%.2f, %.2f, %.2f), uv(%.2f, %.2f), n(%.2f, %.2f, %.2f)",
+                i,
+                vertices[i].pos.x, vertices[i].pos.y, vertices[i].pos.z,
+                vertices[i].color.r, vertices[i].color.g, vertices[i].color.b,
+                vertices[i].texCoord.x, vertices[i].texCoord.y,
+                vertices[i].normal.x, vertices[i].normal.y, vertices[i].normal.z);
+        }
     }
-}
 }
 
 void VulkanModel::draw(VkCommandBuffer commandBuffer,

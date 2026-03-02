@@ -49,7 +49,10 @@ target_include_directories(mygame_core
         SYSTEM PUBLIC
         ${COMMON_DIR}/third_party/VulkanMemoryAllocator/include
 )
-target_compile_definitions(mygame_core PRIVATE DEBUG_LOG=1)
+target_compile_definitions(mygame_core PRIVATE
+        DEBUG_LOG=1
+        DEBUG_LOG_GLTF=0
+)
 target_link_libraries(mygame_core PUBLIC volk glm::glm dl)
 
 add_executable(mygame_desktop
