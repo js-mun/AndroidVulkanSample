@@ -73,6 +73,7 @@ private:
 
 private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void updateFrameGraphResources();
     void resetTrackedLayouts();
 
     void updateUniformBuffer(uint32_t currentImage);

@@ -35,24 +35,9 @@ bool RenderGraph::compile(const std::vector<std::string>& externalResources) {
                 LOGW("[RG] Pass '%s' reads resource '%s' with no producer (treated as external?)",
                      pass.name.c_str(), r.name.c_str());
             }
-            if (mResources.find(r.name) == mResources.end()) {
-                LOGE("[RG] Pass '%s' reads unknown resource '%s'", pass.name.c_str(), r.name.c_str());
-                return false;
-            }
         }
         for (const auto& w : pass.writes) {
             produced.insert(w.name);
-            if (mResources.find(w.name) == mResources.end()) {
-                LOGE("[RG] Pass '%s' writes unknown resource '%s'", pass.name.c_str(), w.name.c_str());
-                return false;
-            }
-        }
-        for (const auto& kv : pass.postLayouts) {
-            if (mResources.find(kv.first) == mResources.end()) {
-                LOGE("[RG] Pass '%s' post-layout for unknown resource '%s'",
-                     pass.name.c_str(), kv.first.c_str());
-                return false;
-            }
         }
     }
 

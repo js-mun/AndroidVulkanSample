@@ -182,34 +182,15 @@ Renderer::~Renderer() {
 
 void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     mActiveImageIndex = imageIndex;
-    buildFrameGraph();
+    if (!mFrameGraphReady) {
+        buildFrameGraph();
+    }
+    updateFrameGraphResources();
     executeFrameGraph(commandBuffer);
 }
 
 void Renderer::buildFrameGraph() {
     mRenderGraph->reset();
-
-    // 실제 이미지 핸들을 현재 프레임 상태(layout)와 함께 등록
-    mRenderGraph->registerResource(
-            "shadow_depth",
-            mShadowResources->getDepthImage(),
-            mSwapchain->getDepthFormat(),
-            mShadowDepthLayout,
-            VK_IMAGE_ASPECT_DEPTH_BIT);
-
-    mRenderGraph->registerResource(
-            "swapchain_color",
-            mSwapchain->getImage(mActiveImageIndex),
-            mSwapchain->getImageFormat(),
-            mSwapchainColorLayouts[mActiveImageIndex],
-            VK_IMAGE_ASPECT_COLOR_BIT);
-
-    mRenderGraph->registerResource(
-            "swapchain_depth",
-            mSwapchain->getDepthImage(),
-            mSwapchain->getDepthFormat(),
-            mSwapchainDepthLayout,
-            VK_IMAGE_ASPECT_DEPTH_BIT);
 
     // 1) Shadow Pass
     mRenderGraph->addPass({
@@ -339,6 +320,30 @@ void Renderer::buildFrameGraph() {
         return;
     }
     mFrameGraphReady = true;
+}
+
+void Renderer::updateFrameGraphResources() {
+    // 프레임마다 달라질 수 있는 실제 이미지 핸들과 현재 레이아웃을 갱신
+    mRenderGraph->registerResource(
+            "shadow_depth",
+            mShadowResources->getDepthImage(),
+            mSwapchain->getDepthFormat(),
+            mShadowDepthLayout,
+            VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    mRenderGraph->registerResource(
+            "swapchain_color",
+            mSwapchain->getImage(mActiveImageIndex),
+            mSwapchain->getImageFormat(),
+            mSwapchainColorLayouts[mActiveImageIndex],
+            VK_IMAGE_ASPECT_COLOR_BIT);
+
+    mRenderGraph->registerResource(
+            "swapchain_depth",
+            mSwapchain->getDepthImage(),
+            mSwapchain->getDepthFormat(),
+            mSwapchainDepthLayout,
+            VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
 void Renderer::executeFrameGraph(VkCommandBuffer commandBuffer) {
