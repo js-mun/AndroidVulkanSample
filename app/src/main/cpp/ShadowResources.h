@@ -15,6 +15,7 @@ public:
                   uint32_t width = kDefaultWidth, uint32_t height = kDefaultHeight);
 
     VkFramebuffer getFramebuffer() const { return mFramebuffer; }
+    VkImage getDepthImage() const { return mDepthImage; }
     VkImageView getDepthView() const { return mDepthView; }
     VkSampler getSampler() const { return mSampler; }
     VkExtent2D getExtent() const { return mExtent; }

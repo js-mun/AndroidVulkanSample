@@ -160,6 +160,7 @@ bool Renderer::initialize() {
     mCamera = std::make_unique<Camera>();
 
     mRenderGraph = std::make_unique<RenderGraph>();
+    resetTrackedLayouts();
     mStartTime = std::chrono::steady_clock::now();
     buildFrameGraph();
 
@@ -177,20 +178,41 @@ Renderer::~Renderer() {
 
 void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     mActiveImageIndex = imageIndex;
-    if (!mFrameGraphReady) {
-        buildFrameGraph();
-    }
+    buildFrameGraph();
     executeFrameGraph(commandBuffer);
 }
 
 void Renderer::buildFrameGraph() {
     mRenderGraph->reset();
 
+    // 실제 이미지 핸들을 현재 프레임 상태(layout)와 함께 등록
+    mRenderGraph->registerResource(
+            "shadow_depth",
+            mShadowResources->getDepthImage(),
+            mSwapchain->getDepthFormat(),
+            mShadowDepthLayout,
+            VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    mRenderGraph->registerResource(
+            "swapchain_color",
+            mSwapchain->getImage(mActiveImageIndex),
+            mSwapchain->getImageFormat(),
+            mSwapchainColorLayouts[mActiveImageIndex],
+            VK_IMAGE_ASPECT_COLOR_BIT);
+
+    mRenderGraph->registerResource(
+            "swapchain_depth",
+            mSwapchain->getDepthImage(),
+            mSwapchain->getDepthFormat(),
+            mSwapchainDepthLayout,
+            VK_IMAGE_ASPECT_DEPTH_BIT);
+
     // 1) Shadow Pass
     mRenderGraph->addPass({
         "ShadowPass",
         {},                 // reads
-        {"shadow_depth"},   // writes
+        {{ "shadow_depth", VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL }},   // writes
+        {{"shadow_depth", VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL}},
         [this](VkCommandBuffer commandBuffer) {
             VkRenderPassBeginInfo rpInfo{};
             rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -245,8 +267,15 @@ void Renderer::buildFrameGraph() {
     // 2) Main Pass
     mRenderGraph->addPass({
         "MainScene",
-        {"shadow_depth"},
-        {"swapchain_color", "swapchain_depth"},
+        {{ "shadow_depth", VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL }},
+        {
+            { "swapchain_color", VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL },
+            { "swapchain_depth", VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL }
+        },
+        {
+            {"swapchain_color", VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
+            {"swapchain_depth", VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}
+        },
         [this](VkCommandBuffer commandBuffer) {
             VkRenderPassBeginInfo renderPassInfo{};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -300,7 +329,7 @@ void Renderer::buildFrameGraph() {
         }
     });
 
-    if (!mRenderGraph->compile({"swapchain_color", "swapchain_depth"})) {
+    if (!mRenderGraph->compile()) {
         LOGE("Failed to compile Render Graph");
         mFrameGraphReady = false;
         return;
@@ -310,6 +339,9 @@ void Renderer::buildFrameGraph() {
 
 void Renderer::executeFrameGraph(VkCommandBuffer commandBuffer) {
     mRenderGraph->execute(commandBuffer);
+    mShadowDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    mSwapchainDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    mSwapchainColorLayouts[mActiveImageIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 }
 
 void Renderer::render() {
@@ -322,6 +354,7 @@ void Renderer::render() {
         mMainGlobalDescriptor->updateShadowMap(
                 mShadowResources->getDepthView(),
                 mShadowResources->getSampler());
+        resetTrackedLayouts();
         mFrameGraphReady = false;
         return;
     }
@@ -350,6 +383,7 @@ void Renderer::render() {
         mMainGlobalDescriptor->updateShadowMap(
                 mShadowResources->getDepthView(),
                 mShadowResources->getSampler());
+        resetTrackedLayouts();
         mFrameGraphReady = false;
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -406,6 +440,7 @@ void Renderer::render() {
         mMainGlobalDescriptor->updateShadowMap(
                 mShadowResources->getDepthView(),
                 mShadowResources->getSampler());
+        resetTrackedLayouts();
         mFrameGraphReady = false;
     }
 
@@ -443,6 +478,12 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
 
     // 4. GPU 전송
     mUniformBuffers[currentImage]->copyTo(&ubo, sizeof(ubo));
+}
+
+void Renderer::resetTrackedLayouts() {
+    mShadowDepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    mSwapchainDepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    mSwapchainColorLayouts.assign(mSwapchain->getImageCount(), VK_IMAGE_LAYOUT_UNDEFINED);
 }
 
 void Renderer::handleTouchDrag(float dx, float dy) {

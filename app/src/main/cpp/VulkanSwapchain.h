@@ -33,6 +33,8 @@ public:
     VkSurfaceTransformFlagBitsKHR getTransform() const { return mSwapchainTransform; }
     const std::vector<VkFramebuffer>& getFramebuffers() const { return mSwapchainFramebuffers; }
     uint32_t getImageCount() const { return static_cast<uint32_t>(mSwapchainImages.size()); }
+    VkImage getImage(uint32_t index) const { return mSwapchainImages[index]; }
+    VkImage getDepthImage() const { return mDepthImage; }
 
 private:
     VulkanContext* mContext;

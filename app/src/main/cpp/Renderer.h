@@ -60,6 +60,9 @@ private:
     std::unique_ptr<RenderGraph> mRenderGraph;
     uint32_t mActiveImageIndex = 0;
     bool mFrameGraphReady = false;
+    VkImageLayout mShadowDepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout mSwapchainDepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    std::vector<VkImageLayout> mSwapchainColorLayouts;
 
     uint32_t mCurrentFrame = 0;
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -70,6 +73,7 @@ private:
 
 private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void resetTrackedLayouts();
 
     void updateUniformBuffer(uint32_t currentImage);
 };
