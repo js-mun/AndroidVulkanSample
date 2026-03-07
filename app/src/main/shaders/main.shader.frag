@@ -56,8 +56,8 @@ void main() {
     float diffuse = ndotl;
 
     // 그림자는 직접광에만 적용하고, 약한 주변광은 유지한다.
-    float directLight = 0.95 * diffuse * mix(1.0, 0.58, shadow);
-    float lighting = min(ambient + directLight, 1.20);
+    float directLight = 1.10 * diffuse * mix(1.0, 0.58, shadow);
+    float lighting = min(ambient + directLight, 1.28);
 
     outColor = vec4(base.rgb * lighting, base.a);
 }
