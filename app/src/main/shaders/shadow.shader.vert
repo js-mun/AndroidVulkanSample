@@ -3,7 +3,7 @@
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 viewProj;
     mat4 lightViewProj;
-    vec4 lightPos;
+    vec4 lightDir;
 } ubo;
 
 layout(push_constant) uniform PushConstants {

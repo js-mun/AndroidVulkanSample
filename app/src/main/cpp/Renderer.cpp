@@ -65,7 +65,7 @@ bool Renderer::initialize() {
     PipelineConfig shadowConfig;
     shadowConfig.vertShaderPath = "shaders/shadow.vert.spv";
     shadowConfig.depthOnly = true;
-    shadowConfig.cullMode = VK_CULL_MODE_BACK_BIT;
+    shadowConfig.cullMode = VK_CULL_MODE_FRONT_BIT;
     shadowConfig.depthBiasConstant = 1.25f;
     shadowConfig.depthBiasSlope = 1.75f;
     shadowConfig.setProfile = PipelineConfig::SetProfile::Shadow;
@@ -477,12 +477,15 @@ void Renderer::updateUniformBuffer(uint32_t currentImage) {
     // 2. 프레임 공통 UBO 작성 (모델 행렬은 push constant로 per-draw 전달)
     UniformBufferObject ubo{};
     ubo.viewProj = mCamera->getViewProjectionMatrix();
-    ubo.lightPos = glm::vec4(4.0f, 6.0f, 4.0f, 1.0f);
+    ubo.lightDir = glm::vec4(glm::normalize(glm::vec3(-0.6f, -1.0f, -0.5f)), 0.0f);
 
     // 3. 라이트 VP
+    const glm::vec3 lightTarget(0.0f, 0.0f, 0.0f);
+    const float lightDistance = 12.0f;
+    glm::vec3 lightPosition = lightTarget - glm::vec3(ubo.lightDir) * lightDistance;
     glm::mat4 lightView = glm::lookAtRH(
-        glm::vec3(ubo.lightPos),
-        glm::vec3(0.0f, 0.0f, 0.0f),
+        lightPosition,
+        lightTarget,
         glm::vec3(0.0f, 1.0f, 0.0f));
 
     glm::mat4 lightProj = glm::orthoRH_ZO(

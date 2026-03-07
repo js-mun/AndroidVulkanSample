@@ -3,7 +3,7 @@
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 viewProj;
     mat4 lightViewProj;
-    vec4 lightPos;
+    vec4 lightDir;
 } ubo;
 
 layout(set = 1, binding = 1) uniform sampler2D texSampler;
@@ -43,22 +43,21 @@ void main() {
                        currentDepth >= 0.0 && currentDepth <= 1.0;
 
     vec3 N = normalize(fragNormal);
-    vec3 L = normalize(ubo.lightPos.xyz - fragWorldPos);
+    vec3 L = normalize(-ubo.lightDir.xyz);
     float ndotl = max(dot(N, L), 0.0);
 
     // 각도 기반 bias
-    float bias = max(0.0035 * (1.0 - ndotl), 0.0010);
-    bias = min(bias, 0.0100);
+    float bias = max(0.0060 * (1.0 - ndotl), 0.0020);
+    bias = min(bias, 0.0150);
 
-    float shadow = inShadowMap ? sampleShadowPCF(proj.xy, currentDepth, bias) : 0.0;
+    float shadow = (inShadowMap && ndotl > 0.0) ? sampleShadowPCF(proj.xy, currentDepth, bias) : 0.0;
 
-    float ambient = 0.78;
-    // Half-Lambert로 측면도 완전히 죽지 않게 한다.
-    float diffuse = ndotl * 0.5 + 0.5;
+    float ambient = 0.24;
+    float diffuse = ndotl;
 
     // 그림자는 직접광에만 적용하고, 약한 주변광은 유지한다.
-    float directLight = 0.62 * diffuse * mix(1.0, 0.58, shadow);
-    float lighting = min(ambient + directLight, 1.60);
+    float directLight = 0.95 * diffuse * mix(1.0, 0.58, shadow);
+    float lighting = min(ambient + directLight, 1.20);
 
     outColor = vec4(base.rgb * lighting, base.a);
 }
