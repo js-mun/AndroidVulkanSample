@@ -138,6 +138,7 @@ bool Renderer::initialize() {
     const std::vector<std::string> modelPaths = {
             "glTF/plane.glb",
             "glTF/AnimatedColorsCube.glb",
+            "glTF/Fox.glb",
     };
     for (const auto& path : modelPaths) {
         auto model = std::make_unique<VulkanModel>(mContext.get());
@@ -158,6 +159,11 @@ bool Renderer::initialize() {
     for (size_t i = 0; i < modelPaths.size(); ++i) {
         if (modelPaths[i].find("AnimatedColorsCube") != std::string::npos) {
             mModelTransforms[i] = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
+        } else if (modelPaths[i].find("Fox") != std::string::npos) {
+            glm::mat4 foxTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -5.0f));
+            foxTransform = glm::scale(foxTransform, glm::vec3(0.03f));
+            foxTransform = glm::rotate(foxTransform, glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            mModelTransforms[i] = foxTransform;
         }
     }
 

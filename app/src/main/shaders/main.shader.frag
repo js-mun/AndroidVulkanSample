@@ -46,17 +46,15 @@ void main() {
     vec3 L = normalize(-ubo.lightDir.xyz);
     float ndotl = max(dot(N, L), 0.0);
 
-    // 각도 기반 bias
     float bias = max(0.0060 * (1.0 - ndotl), 0.0020);
     bias = min(bias, 0.0150);
 
     float shadow = (inShadowMap && ndotl > 0.0) ? sampleShadowPCF(proj.xy, currentDepth, bias) : 0.0;
 
-    float ambient = 0.24;
+    float ambient = 0.2;
     float diffuse = ndotl;
 
-    // 그림자는 직접광에만 적용하고, 약한 주변광은 유지한다.
-    float directLight = 1.10 * diffuse * mix(1.0, 0.58, shadow);
+    float directLight = 1.00 * diffuse * mix(1.0, 0.58, shadow);
     float lighting = min(ambient + directLight, 1.28);
 
     outColor = vec4(base.rgb * lighting, base.a);

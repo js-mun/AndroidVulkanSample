@@ -550,12 +550,30 @@ VkDescriptorSet VulkanModel::getDescriptorSet() const {
 void VulkanModel::loadTextures(const tinygltf::Model& model) {
     for (const auto& image : model.images) {
         auto texture = std::make_unique<VulkanTexture>(mContext);
+        std::vector<unsigned char> rgbaPixels;
+        const unsigned char* pixelData = image.image.data();
+
+        // tinygltf image data can be RGB or RGBA; VulkanTexture currently uploads RGBA bytes.
+        if (image.component == 3) {
+            rgbaPixels.resize(static_cast<size_t>(image.width) * static_cast<size_t>(image.height) * 4);
+            for (int i = 0; i < image.width * image.height; ++i) {
+                rgbaPixels[i * 4 + 0] = image.image[i * 3 + 0];
+                rgbaPixels[i * 4 + 1] = image.image[i * 3 + 1];
+                rgbaPixels[i * 4 + 2] = image.image[i * 3 + 2];
+                rgbaPixels[i * 4 + 3] = 255;
+            }
+            pixelData = rgbaPixels.data();
+        } else if (image.component != 4) {
+            LOGW("Unsupported glTF texture component count: %d", image.component);
+            continue;
+        }
+
         // tinygltf는 이미지를 로드하여 image.image(vector<unsigned char>)에 담아둡니다.
-        if (texture->loadFromMemory(image.image.data(), image.width, image.height, VK_FORMAT_R8G8B8A8_SRGB)) {
+        if (texture->loadFromMemory(pixelData, image.width, image.height, VK_FORMAT_R8G8B8A8_SRGB)) {
             mTextures.push_back(std::move(texture));
             if (DEBUG_LOG_GLTF) {
-                LOGI("Loaded glTF texture: %s (%dx%d)", image.name.c_str(), 
-                        image.width, image.height);
+                LOGI("Loaded glTF texture: %s (%dx%d, components=%d)", image.name.c_str(),
+                        image.width, image.height, image.component);
             }
         }
     }
@@ -742,6 +760,12 @@ void VulkanModel::processPrimitive(const tinygltf::Model& model,
         } else if (indexAccessor.componentType == TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE) {
             const uint8_t* buf = reinterpret_cast<const uint8_t*>(indexData);
             for (size_t i = 0; i < indexAccessor.count; i++) indices[i] = buf[i];
+        }
+    } else {
+        // glTF primitive can omit indices and be drawn in vertex order.
+        indices.resize(vertices.size());
+        for (size_t i = 0; i < vertices.size(); ++i) {
+            indices[i] = static_cast<uint32_t>(i);
         }
     }
 

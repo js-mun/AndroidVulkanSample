@@ -18,6 +18,7 @@ VulkanTexture::~VulkanTexture() {
 }
 
 bool VulkanTexture::loadFromMemory(const unsigned char* pixels, uint32_t width, uint32_t height, VkFormat format) {
+    mTextureFormat = format;
     VkDeviceSize imageSize = width * height * 4; // RGBA 기준
 
     // 1. 스테이징 버퍼 생성 및 데이터 복사
@@ -56,7 +57,7 @@ void VulkanTexture::createTextureImageView() {
     VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
     viewInfo.image = mTextureImage;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB; // AnimatedCube 기준
+    viewInfo.format = mTextureFormat;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;

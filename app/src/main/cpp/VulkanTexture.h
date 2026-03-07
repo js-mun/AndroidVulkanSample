@@ -16,6 +16,7 @@ public:
 
 private:
     VulkanContext* mContext;
+    VkFormat mTextureFormat = VK_FORMAT_UNDEFINED;
     
     VkImage mTextureImage = VK_NULL_HANDLE;
     VmaAllocation mTextureAllocation = VK_NULL_HANDLE;

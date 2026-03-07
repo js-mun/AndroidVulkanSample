@@ -6,6 +6,22 @@
 #include "Log.h"
 #include <algorithm>
 
+namespace {
+const char* formatToString(VkFormat format) {
+    switch (format) {
+        case VK_FORMAT_R8G8B8A8_SRGB: return "VK_FORMAT_R8G8B8A8_SRGB";
+        case VK_FORMAT_B8G8R8A8_SRGB: return "VK_FORMAT_B8G8R8A8_SRGB";
+        case VK_FORMAT_R8G8B8A8_UNORM: return "VK_FORMAT_R8G8B8A8_UNORM";
+        case VK_FORMAT_B8G8R8A8_UNORM: return "VK_FORMAT_B8G8R8A8_UNORM";
+        default: return "Other";
+    }
+}
+
+bool isSrgbFormat(VkFormat format) {
+    return format == VK_FORMAT_R8G8B8A8_SRGB || format == VK_FORMAT_B8G8R8A8_SRGB;
+}
+} // namespace
+
 VulkanSwapchain::VulkanSwapchain(VulkanContext* context) : mContext(context) {
 }
 
@@ -77,15 +93,21 @@ bool VulkanSwapchain::createSwapchain() {
 
     LOGV("Found %zu surface format(s):", formats.size());
     VkSurfaceFormatKHR surfaceFormat = formats[0];
+    bool foundPreferredSrgb = false;
+
     for (const auto& f : formats) {
-        LOGV("  - Format: %d, ColorSpace: %d", f.format, f.colorSpace);
+        LOGV("  - Format: %s (%d), ColorSpace: %d",
+             formatToString(f.format), f.format, f.colorSpace);
+    }
+    for (const auto& f : formats) {
         if ((f.format == VK_FORMAT_R8G8B8A8_SRGB || f.format == VK_FORMAT_B8G8R8A8_SRGB) &&
             f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             surfaceFormat = f;
+            foundPreferredSrgb = true;
             break;
         }
     }
-    if (surfaceFormat.format == formats[0].format) {
+    if (!foundPreferredSrgb) {
         for (const auto& f : formats) {
             if ((f.format == VK_FORMAT_R8G8B8A8_UNORM || f.format == VK_FORMAT_B8G8R8A8_UNORM) &&
                 f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
@@ -95,7 +117,11 @@ bool VulkanSwapchain::createSwapchain() {
         }
     }
     mSwapchainImageFormat = surfaceFormat.format;
-    LOGV("Selected final format: %d", mSwapchainImageFormat);
+    LOGI("Selected swapchain format: %s (%d), colorspace=%d, srgb=%s",
+         formatToString(mSwapchainImageFormat),
+         mSwapchainImageFormat,
+         surfaceFormat.colorSpace,
+         isSrgbFormat(mSwapchainImageFormat) ? "true" : "false");
 
     uint32_t imageCount = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {

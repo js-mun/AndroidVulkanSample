@@ -5,8 +5,14 @@ void VulkanMesh::initialize(VulkanContext* context,
                 const void* indexData,
                 uint32_t indexCount,
                 VkIndexType indexType) {
+    mVertexCount = static_cast<uint32_t>(vertices.size());
     mIndexCount = indexCount;
     mIndexType = indexType;
+
+    if (vertices.empty() || indexCount == 0 || indexData == nullptr) {
+        mIndexCount = 0;
+        return;
+    }
 
     // 1. Vertex
     // Staging Buffer 생성
@@ -49,6 +55,10 @@ void VulkanMesh::initialize(VulkanContext* context,
 }
 
 void VulkanMesh::draw(VkCommandBuffer commandBuffer) {
+    if (!mVertexBuffer || !mIndexBuffer || mIndexCount == 0) {
+        return;
+    }
+
     VkBuffer vertexBuffers[] = { mVertexBuffer->getBuffer() };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
