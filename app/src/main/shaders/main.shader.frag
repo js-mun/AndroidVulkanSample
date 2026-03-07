@@ -21,14 +21,15 @@ float sampleShadowPCF(vec2 uv, float compareDepth, float bias) {
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
     float shadow = 0.0;
 
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            float shadowDepth = texture(shadowMap, uv + vec2(x, y) * texelSize).r;
+    for (int y = 0; y <= 1; ++y) {
+        for (int x = 0; x <= 1; ++x) {
+            vec2 offset = (vec2(x, y) - vec2(0.5)) * texelSize;
+            float shadowDepth = texture(shadowMap, uv + offset).r;
             shadow += (compareDepth - bias > shadowDepth) ? 1.0 : 0.0;
         }
     }
 
-    return shadow / 9.0;
+    return shadow / 4.0;
 }
 
 void main() {
@@ -37,24 +38,27 @@ void main() {
     vec3 proj = fragShadowCoord.xyz / fragShadowCoord.w;
     proj.xy = proj.xy * 0.5 + 0.5;
     float currentDepth = proj.z;
-
-    if (proj.x < 0.0 || proj.x > 1.0 ||
-        proj.y < 0.0 || proj.y > 1.0 ||
-        currentDepth < 0.0 || currentDepth > 1.0) {
-        outColor = base;
-        return;
-    }
+    bool inShadowMap = proj.x >= 0.0 && proj.x <= 1.0 &&
+                       proj.y >= 0.0 && proj.y <= 1.0 &&
+                       currentDepth >= 0.0 && currentDepth <= 1.0;
 
     vec3 N = normalize(fragNormal);
-
     vec3 L = normalize(ubo.lightPos.xyz - fragWorldPos);
     float ndotl = max(dot(N, L), 0.0);
 
     // 각도 기반 bias
-    float bias = max(0.0006 * (1.0 - ndotl), 0.0002);
-    bias = min(bias, 0.0025);
+    float bias = max(0.0035 * (1.0 - ndotl), 0.0010);
+    bias = min(bias, 0.0100);
 
-    float shadow = sampleShadowPCF(proj.xy, currentDepth, bias);
-    float visibility = mix(1.0, 0.45, shadow);
-    outColor = vec4(base.rgb * visibility, base.a);
+    float shadow = inShadowMap ? sampleShadowPCF(proj.xy, currentDepth, bias) : 0.0;
+
+    float ambient = 0.78;
+    // Half-Lambert로 측면도 완전히 죽지 않게 한다.
+    float diffuse = ndotl * 0.5 + 0.5;
+
+    // 그림자는 직접광에만 적용하고, 약한 주변광은 유지한다.
+    float directLight = 0.62 * diffuse * mix(1.0, 0.58, shadow);
+    float lighting = min(ambient + directLight, 1.60);
+
+    outColor = vec4(base.rgb * lighting, base.a);
 }
