@@ -17,6 +17,20 @@ layout(location = 4) in vec3 fragNormal;
 
 layout(location = 0) out vec4 outColor;
 
+float sampleShadowPCF(vec2 uv, float compareDepth, float bias) {
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+    float shadow = 0.0;
+
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            float shadowDepth = texture(shadowMap, uv + vec2(x, y) * texelSize).r;
+            shadow += (compareDepth - bias > shadowDepth) ? 1.0 : 0.0;
+        }
+    }
+
+    return shadow / 9.0;
+}
+
 void main() {
     vec4 base = texture(texSampler, fragTexCoord) * vec4(fragColor, 1.0);
 
@@ -40,8 +54,7 @@ void main() {
     float bias = max(0.0006 * (1.0 - ndotl), 0.0002);
     bias = min(bias, 0.0025);
 
-    float shadowDepth = texture(shadowMap, proj.xy).r;
-    float shadow = (currentDepth - bias > shadowDepth) ? 1.0 : 0.0;
+    float shadow = sampleShadowPCF(proj.xy, currentDepth, bias);
     float visibility = mix(1.0, 0.45, shadow);
     outColor = vec4(base.rgb * visibility, base.a);
 }

@@ -21,8 +21,8 @@ public:
     VkExtent2D getExtent() const { return mExtent; }
 
 private:
-    static constexpr uint32_t kDefaultWidth = 1024;
-    static constexpr uint32_t kDefaultHeight = 1024;
+    static constexpr uint32_t kDefaultWidth = 2048;
+    static constexpr uint32_t kDefaultHeight = 2048;
 
     VulkanContext* mContext = nullptr;
     VkExtent2D mExtent{};
